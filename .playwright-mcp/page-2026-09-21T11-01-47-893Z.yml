@@ -1,0 +1,255 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e23]:
+    - complementary [ref=e24]:
+      - generic [ref=e33]:
+        - generic [ref=e34]: Dream Big
+        - generic [ref=e35]: Fitness Studio
+      - generic [ref=e36]: Workspace
+      - navigation [ref=e37]:
+        - button "Dashboard" [ref=e38] [cursor=pointer]
+        - button "Members" [ref=e45] [cursor=pointer]
+        - button "Payments" [ref=e52] [cursor=pointer]
+        - button "Renewals Live" [ref=e58] [cursor=pointer]:
+          - generic [ref=e64]: Renewals
+          - generic [ref=e65]: Live
+        - button "Membership plans" [ref=e66] [cursor=pointer]
+        - button "Balance sheet" [ref=e72] [cursor=pointer]
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - generic [ref=e78]: Owner workspace
+          - paragraph [ref=e82]: Single studio view. Historical records stay protected.
+        - generic [ref=e83]:
+          - generic [ref=e84]: D
+          - generic [ref=e85]:
+            - generic [ref=e86]: dreambigfitnessstudio@gmail.com
+            - generic [ref=e87]: dreambigfitnessstudio@gmail.com
+          - button "Sign out" [ref=e88] [cursor=pointer]
+    - main [ref=e93]:
+      - generic [ref=e94]:
+        - button "Dashboard" [ref=e95] [cursor=pointer]
+        - button "Members" [ref=e101] [cursor=pointer]
+        - button "Payments" [ref=e107] [cursor=pointer]
+        - button "Renewals" [ref=e112] [cursor=pointer]
+        - button "Membership plans" [ref=e118] [cursor=pointer]
+        - button "Balance sheet" [ref=e123] [cursor=pointer]
+      - generic [ref=e126]:
+        - generic [ref=e127]:
+          - generic [ref=e128]: Owner workspace
+          - generic [ref=e131]: Dashboard
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - text: Press
+            - generic [ref=e137]: ⌘ K
+            - text: to search
+          - button "Notifications" [ref=e138] [cursor=pointer]
+      - generic [ref=e142]:
+        - generic [ref=e143]:
+          - generic [ref=e144]:
+            - generic [ref=e145]: Live studio overview
+            - heading "Good morning, Owner" [level=1] [ref=e147]
+            - paragraph [ref=e148]: Here is what needs your attention today.
+          - generic [ref=e149]:
+            - generic [ref=e150]: 21 Sept 2026
+            - button "Refresh" [ref=e153] [cursor=pointer]
+        - generic [ref=e159]:
+          - generic [ref=e160]:
+            - generic [ref=e167]: Total members
+            - generic [ref=e168]: "501"
+            - generic [ref=e169]: Permanent member records
+          - generic [ref=e170]:
+            - generic [ref=e174]: Active members
+            - generic [ref=e175]: "32"
+            - generic [ref=e176]: Renewal date is current
+          - generic [ref=e177]:
+            - generic [ref=e182]: Pending payments
+            - generic [ref=e183]: "3"
+            - generic [ref=e184]: ₹4,96,854 to collect
+          - generic [ref=e185]:
+            - generic [ref=e190]: Expiring soon
+            - generic [ref=e191]: "24"
+            - generic [ref=e192]: Within next 30 days
+        - generic [ref=e193]:
+          - generic [ref=e199]:
+            - generic [ref=e200]: Monthly revenue
+            - generic [ref=e201]: ₹800
+          - generic [ref=e209]:
+            - generic [ref=e210]: Today's renewals
+            - generic [ref=e211]: "5"
+          - generic [ref=e217]:
+            - generic [ref=e218]: New this month
+            - generic [ref=e219]: "2"
+          - generic [ref=e224]:
+            - generic [ref=e225]: Inactive attention
+            - generic [ref=e226]: "344"
+        - generic [ref=e227]:
+          - generic [ref=e228]:
+            - generic [ref=e229]:
+              - generic [ref=e230]:
+                - heading "Revenue overview" [level=2] [ref=e231]
+                - paragraph [ref=e232]: Collected amount from the monthly balance sheet
+              - generic [ref=e233]: ept 2026
+            - generic [ref=e279]:
+              - 'generic "2025-09: ₹52,880" [ref=e280]': "09"
+              - 'generic "2025-10: ₹46,115" [ref=e282]': "10"
+              - 'generic "2025-11: ₹36,320" [ref=e284]': "11"
+              - 'generic "2025-12: ₹30,169" [ref=e286]': "12"
+              - 'generic "2026-01: ₹40,983" [ref=e288]': "01"
+              - 'generic "2026-02: ₹47,322" [ref=e290]': "02"
+              - 'generic "2026-03: ₹35,236" [ref=e292]': "03"
+              - 'generic "2026-04: ₹32,200" [ref=e294]': "04"
+              - 'generic "2026-05: ₹24,687" [ref=e296]': "05"
+              - 'generic "2026-06: ₹46,350" [ref=e298]': "06"
+              - 'generic "2026-07: ₹54,709" [ref=e300]': "07"
+              - 'generic "2026-08: ₹31,270" [ref=e302]': "08"
+            - generic [ref=e304]:
+              - generic [ref=e305]: Collected revenue
+              - generic [ref=e307]: Last 12 months
+          - generic [ref=e239]:
+            - generic [ref=e240]:
+              - generic [ref=e241]:
+                - heading "Upcoming renewals" [level=2] [ref=e242]
+                - paragraph [ref=e243]: Next members to follow up
+              - button "View all" [ref=e244] [cursor=pointer]
+            - generic [ref=e308]:
+              - generic [ref=e309]:
+                - generic [ref=e310]: K
+                - 'button "KHILAWAN #471 · Strength Zone" [ref=e311] [cursor=pointer]':
+                  - generic [ref=e312]: KHILAWAN
+                  - generic [ref=e313]: "#471 · Strength Zone"
+                - generic [ref=e314]:
+                  - generic [ref=e315]: 21 Sept
+                  - link "WhatsApp KHILAWAN" [ref=e316] [cursor=pointer]:
+                    - /url: https://wa.me/6263657960?text=Hi%20KHILAWAN%2C%0A%0AYour%20Strength%20Zone%20membership%20at%20Dream%20Big%20Fitness%20Studio%20is%20due%20for%20renewal%20on%2021%20Sept%202026.%0A%0APlease%20get%20in%20touch%20to%20continue%20your%20membership.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                    - generic [ref=e319]: WhatsApp
+              - generic [ref=e320]:
+                - generic [ref=e321]: L
+                - 'button "LOGESH #470 · Strength Zone" [ref=e322] [cursor=pointer]':
+                  - generic [ref=e323]: LOGESH
+                  - generic [ref=e324]: "#470 · Strength Zone"
+                - generic [ref=e325]:
+                  - generic [ref=e326]: 21 Sept
+                  - link "WhatsApp LOGESH" [ref=e327] [cursor=pointer]:
+                    - /url: https://wa.me/9962401845?text=Hi%20LOGESH%2C%0A%0AYour%20Strength%20Zone%20membership%20at%20Dream%20Big%20Fitness%20Studio%20is%20due%20for%20renewal%20on%2021%20Sept%202026.%0A%0APlease%20get%20in%20touch%20to%20continue%20your%20membership.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                    - generic [ref=e330]: WhatsApp
+              - generic [ref=e331]:
+                - generic [ref=e332]: SM
+                - 'button "SYRYA M #469 · Strength Zone" [ref=e333] [cursor=pointer]':
+                  - generic [ref=e334]: SYRYA M
+                  - generic [ref=e335]: "#469 · Strength Zone"
+                - generic [ref=e336]:
+                  - generic [ref=e337]: 21 Sept
+                  - link "WhatsApp SYRYA M" [ref=e338] [cursor=pointer]:
+                    - /url: https://wa.me/9514379892?text=Hi%20SYRYA%20M%2C%0A%0AYour%20Strength%20Zone%20membership%20at%20Dream%20Big%20Fitness%20Studio%20is%20due%20for%20renewal%20on%2021%20Sept%202026.%0A%0APlease%20get%20in%20touch%20to%20continue%20your%20membership.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                    - generic [ref=e341]: WhatsApp
+              - generic [ref=e342]:
+                - generic [ref=e343]: MM
+                - 'button "MAHALAKSHMI M #429 · General Fitness" [ref=e344] [cursor=pointer]':
+                  - generic [ref=e345]: MAHALAKSHMI M
+                  - generic [ref=e346]: "#429 · General Fitness"
+                - generic [ref=e347]:
+                  - generic [ref=e348]: 21 Sept
+                  - link "WhatsApp MAHALAKSHMI M" [ref=e349] [cursor=pointer]:
+                    - /url: https://wa.me/8438321319?text=Hi%20MAHALAKSHMI%20M%2C%0A%0AYour%20General%20Fitness%20membership%20at%20Dream%20Big%20Fitness%20Studio%20is%20due%20for%20renewal%20on%2021%20Sept%202026.%0A%0APlease%20get%20in%20touch%20to%20continue%20your%20membership.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                    - generic [ref=e352]: WhatsApp
+              - generic [ref=e353]:
+                - generic [ref=e354]: RS
+                - 'button "RAJESH S #172 · General Fitness" [ref=e355] [cursor=pointer]':
+                  - generic [ref=e356]: RAJESH S
+                  - generic [ref=e357]: "#172 · General Fitness"
+                - generic [ref=e358]:
+                  - generic [ref=e359]: 21 Sept
+                  - link "WhatsApp RAJESH S" [ref=e360] [cursor=pointer]:
+                    - /url: https://wa.me/8428597110?text=Hi%20RAJESH%20S%2C%0A%0AYour%20General%20Fitness%20membership%20at%20Dream%20Big%20Fitness%20Studio%20is%20due%20for%20renewal%20on%2021%20Sept%202026.%0A%0APlease%20get%20in%20touch%20to%20continue%20your%20membership.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                    - generic [ref=e363]: WhatsApp
+        - generic [ref=e253]:
+          - generic [ref=e254]:
+            - generic [ref=e255]:
+              - generic [ref=e256]:
+                - heading "Pending payments" [level=2] [ref=e257]
+                - paragraph [ref=e258]: Members who need a payment follow-up
+              - button "View payments" [ref=e259] [cursor=pointer]
+            - table [ref=e365]:
+              - rowgroup [ref=e366]:
+                - row [ref=e367]:
+                  - columnheader "Member" [ref=e368]
+                  - columnheader "Due" [ref=e369]
+                  - columnheader "Pending" [ref=e370]
+                  - columnheader [ref=e371]
+              - rowgroup [ref=e372]:
+                - row [ref=e373]:
+                  - cell [ref=e374]:
+                    - 'button "JS JARDIS SK M #152" [ref=e375] [cursor=pointer]':
+                      - generic [ref=e376]: JS
+                      - generic [ref=e377]:
+                        - generic [ref=e378]: JARDIS SK M
+                        - generic [ref=e379]: "#152"
+                  - cell "₹800" [ref=e380]
+                  - cell "₹200" [ref=e381]
+                  - cell [ref=e382]:
+                    - link "WhatsApp JARDIS SK M" [ref=e383] [cursor=pointer]:
+                      - /url: https://wa.me/6294231846?text=Hi%20JARDIS%20SK%20M%2C%0A%0AThis%20is%20a%20reminder%20from%20Dream%20Big%20Fitness%20Studio.%0A%0AYour%20current%20membership%3A%20Strength%20Zone%0AAmount%20due%3A%20%E2%82%B9800%0APaid%20amount%3A%20%E2%82%B90%0APending%20amount%3A%20%E2%82%B9200%0ARenewal%20date%3A%2013%20Mar%202026%0A%0APlease%20complete%20your%20pending%20payment%20at%20your%20earliest%20convenience.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                      - generic [ref=e386]: WhatsApp
+                - row [ref=e387]:
+                  - cell [ref=e388]:
+                    - 'button "BY BALAJI Y #135" [ref=e389] [cursor=pointer]':
+                      - generic [ref=e390]: BY
+                      - generic [ref=e391]:
+                        - generic [ref=e392]: BALAJI Y
+                        - generic [ref=e393]: "#135"
+                  - cell "₹1,000" [ref=e394]
+                  - cell "₹200" [ref=e395]
+                  - cell [ref=e396]:
+                    - link "WhatsApp BALAJI Y" [ref=e397] [cursor=pointer]:
+                      - /url: https://wa.me/7358401095?text=Hi%20BALAJI%20Y%2C%0A%0AThis%20is%20a%20reminder%20from%20Dream%20Big%20Fitness%20Studio.%0A%0AYour%20current%20membership%3A%20General%20Fitness%0AAmount%20due%3A%20%E2%82%B91%2C000%0APaid%20amount%3A%20%E2%82%B90%0APending%20amount%3A%20%E2%82%B9200%0ARenewal%20date%3A%2001%20May%202026%0A%0APlease%20complete%20your%20pending%20payment%20at%20your%20earliest%20convenience.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                      - generic [ref=e400]: WhatsApp
+                - row [ref=e401]:
+                  - cell [ref=e402]:
+                    - 'button "SR SUNIL R #67" [ref=e403] [cursor=pointer]':
+                      - generic [ref=e404]: SR
+                      - generic [ref=e405]:
+                        - generic [ref=e406]: SUNIL R
+                        - generic [ref=e407]: "#67"
+                  - cell "₹4,000" [ref=e408]
+                  - cell "₹4,000" [ref=e409]
+                  - cell [ref=e410]:
+                    - link "WhatsApp SUNIL R" [ref=e411] [cursor=pointer]:
+                      - /url: https://wa.me/7397357758?text=Hi%20SUNIL%20R%2C%0A%0AThis%20is%20a%20reminder%20from%20Dream%20Big%20Fitness%20Studio.%0A%0AYour%20current%20membership%3A%20General%20Fitness%0AAmount%20due%3A%20%E2%82%B94%2C000%0APaid%20amount%3A%20%E2%82%B90%0APending%20amount%3A%20%E2%82%B94%2C000%0ARenewal%20date%3A%2017%20Mar%202026%0A%0APlease%20complete%20your%20pending%20payment%20at%20your%20earliest%20convenience.%0A%0AThank%20you%2C%0ADream%20Big%20Fitness%20Studio
+                      - generic [ref=e414]: WhatsApp
+          - generic [ref=e265]:
+            - generic [ref=e266]:
+              - generic [ref=e267]:
+                - heading "Recently joined" [level=2] [ref=e268]
+                - paragraph [ref=e269]: New members in the current month
+              - button "View members" [ref=e270] [cursor=pointer]
+            - generic [ref=e415]:
+              - button "RT RAVI TEJA J Joined 01 Sept Active" [ref=e416] [cursor=pointer]:
+                - generic [ref=e417]: RT
+                - generic [ref=e418]:
+                  - generic [ref=e419]: RAVI TEJA J
+                  - generic [ref=e420]: Joined 01 Sept
+                - generic [ref=e421]: Active
+              - button "PS PRASANTH S Joined 01 Sept Active" [ref=e422] [cursor=pointer]:
+                - generic [ref=e423]: PS
+                - generic [ref=e424]:
+                  - generic [ref=e425]: PRASANTH S
+                  - generic [ref=e426]: Joined 01 Sept
+                - generic [ref=e427]: Active
+              - button "HR HARISH RAJ Joined 24 Aug Active" [ref=e428] [cursor=pointer]:
+                - generic [ref=e429]: HR
+                - generic [ref=e430]:
+                  - generic [ref=e431]: HARISH RAJ
+                  - generic [ref=e432]: Joined 24 Aug
+                - generic [ref=e433]: Active
+              - button "YG YOGESH G Joined 20 Aug Expired" [ref=e434] [cursor=pointer]:
+                - generic [ref=e435]: YG
+                - generic [ref=e436]:
+                  - generic [ref=e437]: YOGESH G
+                  - generic [ref=e438]: Joined 20 Aug
+                - generic [ref=e439]: Expired
+              - button "C CHANDASH Joined 18 Aug Expired" [ref=e440] [cursor=pointer]:
+                - generic [ref=e441]: C
+                - generic [ref=e442]:
+                  - generic [ref=e443]: CHANDASH
+                  - generic [ref=e444]: Joined 18 Aug
+                - generic [ref=e445]: Expired

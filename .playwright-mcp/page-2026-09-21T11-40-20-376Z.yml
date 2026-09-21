@@ -1,0 +1,122 @@
+- generic [ref=f1e2]:
+  - region "Notifications alt+T"
+  - generic [ref=f1e23]:
+    - complementary [ref=f1e24]:
+      - generic [ref=f1e33]:
+        - generic [ref=f1e34]: Dream Big
+        - generic [ref=f1e35]: Fitness Studio
+      - generic [ref=f1e36]: Workspace
+      - navigation [ref=f1e37]:
+        - button "Dashboard" [ref=f1e38] [cursor=pointer]
+        - button "Members" [ref=f1e45] [cursor=pointer]
+        - button "Payments" [ref=f1e52] [cursor=pointer]
+        - button "Renewals Live" [ref=f1e58] [cursor=pointer]:
+          - generic [ref=f1e64]: Renewals
+          - generic [ref=f1e65]: Live
+        - button "Membership plans" [ref=f1e66] [cursor=pointer]
+        - button "Balance sheet" [ref=f1e72] [cursor=pointer]
+      - generic [ref=f1e76]:
+        - generic [ref=f1e77]:
+          - generic [ref=f1e78]: Owner workspace
+          - paragraph [ref=f1e82]: Single studio view. Historical records stay protected.
+        - generic [ref=f1e83]:
+          - generic [ref=f1e84]: D
+          - generic [ref=f1e85]:
+            - generic [ref=f1e86]: dreambigfitnessstudio@gmail.com
+            - generic [ref=f1e87]: dreambigfitnessstudio@gmail.com
+          - button "Sign out" [ref=f1e88] [cursor=pointer]
+    - main [ref=f1e93]:
+      - generic [ref=f1e94]:
+        - button "Dashboard" [ref=f1e95] [cursor=pointer]
+        - button "Members" [ref=f1e101] [cursor=pointer]
+        - button "Payments" [ref=f1e107] [cursor=pointer]
+        - button "Renewals" [ref=f1e112] [cursor=pointer]
+        - button "Membership plans" [ref=f1e118] [cursor=pointer]
+        - button "Balance sheet" [ref=f1e123] [cursor=pointer]
+      - generic [ref=f1e126]:
+        - generic [ref=f1e127]:
+          - generic [ref=f1e128]: Owner workspace
+          - generic [ref=f1e131]: Dashboard
+        - generic [ref=f1e132]:
+          - generic [ref=f1e133]:
+            - text: Press
+            - generic [ref=f1e137]: ⌘ K
+            - text: to search
+          - button "Notifications" [ref=f1e138] [cursor=pointer]
+      - generic [ref=f1e142]:
+        - generic [ref=f1e143]:
+          - generic [ref=f1e144]:
+            - generic [ref=f1e145]: Live studio overview
+            - heading "Good morning, Owner" [level=1] [ref=f1e147]
+            - paragraph [ref=f1e148]: Here is what needs your attention today.
+          - generic [ref=f1e149]:
+            - generic [ref=f1e150]: 21 Sept 2026
+            - button "Refresh" [ref=f1e153] [cursor=pointer]
+        - generic [ref=f1e159]:
+          - generic [ref=f1e160]:
+            - generic [ref=f1e167]: Total members
+            - generic [ref=f1e168]: —
+            - generic [ref=f1e169]: Permanent member records
+          - generic [ref=f1e170]:
+            - generic [ref=f1e174]: Active members
+            - generic [ref=f1e175]: —
+            - generic [ref=f1e176]: Renewal date is current
+          - generic [ref=f1e177]:
+            - generic [ref=f1e182]: Pending payments
+            - generic [ref=f1e183]: —
+            - generic [ref=f1e184]: Awaiting live data
+          - generic [ref=f1e185]:
+            - generic [ref=f1e190]: Expiring soon
+            - generic [ref=f1e191]: —
+            - generic [ref=f1e192]: Within next 30 days
+        - generic [ref=f1e193]:
+          - generic [ref=f1e199]:
+            - generic [ref=f1e200]: Monthly revenue
+            - generic [ref=f1e201]: —
+          - generic [ref=f1e209]:
+            - generic [ref=f1e210]: Today's renewals
+            - generic [ref=f1e211]: —
+          - generic [ref=f1e217]:
+            - generic [ref=f1e218]: New this month
+            - generic [ref=f1e219]: —
+          - generic [ref=f1e224]:
+            - generic [ref=f1e225]: Inactive attention
+            - generic [ref=f1e226]: —
+        - generic [ref=f1e227]:
+          - generic [ref=f1e228]:
+            - generic [ref=f1e229]:
+              - generic [ref=f1e230]:
+                - heading "Revenue overview" [level=2] [ref=f1e231]
+                - paragraph [ref=f1e232]: Collected amount from the monthly balance sheet
+              - generic [ref=f1e233]: This month
+            - generic [ref=f1e234]:
+              - generic [ref=f1e237]: Revenue trend will appear here
+              - generic [ref=f1e238]: No balance-sheet rows are visible yet.
+          - generic [ref=f1e239]:
+            - generic [ref=f1e240]:
+              - generic [ref=f1e241]:
+                - heading "Upcoming renewals" [level=2] [ref=f1e242]
+                - paragraph [ref=f1e243]: Next members to follow up
+              - button "View all" [ref=f1e244] [cursor=pointer]
+            - generic [ref=f1e245]:
+              - generic [ref=f1e251]: No upcoming renewals
+              - generic [ref=f1e252]: Great — there is nothing due in the next 30 days.
+        - generic [ref=f1e253]:
+          - generic [ref=f1e254]:
+            - generic [ref=f1e255]:
+              - generic [ref=f1e256]:
+                - heading "Pending payments" [level=2] [ref=f1e257]
+                - paragraph [ref=f1e258]: Members who need a payment follow-up
+              - button "View payments" [ref=f1e259] [cursor=pointer]
+            - generic [ref=f1e260]:
+              - generic [ref=f1e263]: No pending member balances
+              - generic [ref=f1e264]: Every visible member account is settled.
+          - generic [ref=f1e265]:
+            - generic [ref=f1e266]:
+              - generic [ref=f1e267]:
+                - heading "Recently joined" [level=2] [ref=f1e268]
+                - paragraph [ref=f1e269]: New members in the current month
+              - button "View members" [ref=f1e270] [cursor=pointer]
+            - generic [ref=f1e271]:
+              - generic [ref=f1e277]: No recent joiners
+              - generic [ref=f1e278]: New members will appear here once data is available.

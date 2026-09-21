@@ -1,0 +1,14 @@
+- generic [ref=f4e2]:
+  - region "Notifications alt+T"
+  - generic [ref=f4e4]:
+    - heading "Dream Big Fitness Studio" [level=1] [ref=f4e12]
+    - paragraph [ref=f4e13]: Sign in to access the owner-only dashboard for your Chennai studio.
+    - generic [ref=f4e14]:
+      - generic [ref=f4e15]:
+        - text: Email
+        - textbox "Email" [ref=f4e16]:
+          - /placeholder: owner@dreambig.fit
+      - generic [ref=f4e17]:
+        - text: Password
+        - textbox "Password" [ref=f4e18]
+    - button "Continue to owner dashboard" [ref=f4e19] [cursor=pointer]

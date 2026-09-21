@@ -1,0 +1,442 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - region "Notifications alt+T"
+    - generic [ref=f4e23]:
+      - complementary [ref=f4e24]:
+        - generic [ref=f4e33]:
+          - generic [ref=f4e34]: Dream Big
+          - generic [ref=f4e35]: Fitness Studio
+        - generic [ref=f4e36]: Workspace
+        - navigation [ref=f4e37]:
+          - button "Dashboard" [ref=f4e38] [cursor=pointer]
+          - button "Members" [ref=f4e45] [cursor=pointer]
+          - button "Payments" [ref=f4e52] [cursor=pointer]
+          - button "Renewals Live" [ref=f4e58] [cursor=pointer]:
+            - generic [ref=f4e64]: Renewals
+            - generic [ref=f4e65]: Live
+          - button "Membership plans" [ref=f4e66] [cursor=pointer]
+          - button "Balance sheet" [ref=f4e72] [cursor=pointer]
+        - generic [ref=f4e76]:
+          - generic [ref=f4e77]:
+            - generic [ref=f4e78]: Owner workspace
+            - paragraph [ref=f4e82]: Single studio view. Historical records stay protected.
+          - generic [ref=f4e83]:
+            - generic [ref=f4e84]: D
+            - generic [ref=f4e85]:
+              - generic [ref=f4e86]: dreambigfitnessstudio@gmail.com
+              - generic [ref=f4e87]: dreambigfitnessstudio@gmail.com
+            - button "Sign out" [ref=f4e88] [cursor=pointer]
+      - main [ref=f4e93]:
+        - generic [ref=f4e94]:
+          - button "Dashboard" [ref=f4e95] [cursor=pointer]
+          - button "Members" [ref=f4e101] [cursor=pointer]
+          - button "Payments" [ref=f4e107] [cursor=pointer]
+          - button "Renewals" [ref=f4e112] [cursor=pointer]
+          - button "Membership plans" [ref=f4e118] [cursor=pointer]
+          - button "Balance sheet" [ref=f4e123] [cursor=pointer]
+        - generic [ref=f4e126]:
+          - generic [ref=f4e127]:
+            - generic [ref=f4e128]: Owner workspace
+            - generic [ref=f4e131]: Dashboard
+          - generic [ref=f4e132]:
+            - generic [ref=f4e133]:
+              - text: Press
+              - generic [ref=f4e137]: ⌘ K
+              - text: to search
+            - button "Notifications" [ref=f4e138] [cursor=pointer]
+        - generic [ref=f4e142]:
+          - generic [ref=f4e143]:
+            - generic [ref=f4e144]:
+              - generic [ref=f4e145]: Live studio overview
+              - heading "Good morning, Owner" [level=1] [ref=f4e147]
+              - paragraph [ref=f4e148]: Real-time studio statistics based on member status logic.
+            - generic [ref=f4e149]:
+              - generic [ref=f4e150]: 21 Sept 2026
+              - button "Refresh" [ref=f4e153] [cursor=pointer]
+          - generic [ref=f4e159]:
+            - generic [ref=f4e160]:
+              - generic [ref=f4e161]: Total Members
+              - generic [ref=f4e162]: "502"
+              - button "View All" [ref=f4e163] [cursor=pointer]
+            - generic [ref=f4e166]:
+              - generic [ref=f4e167]: Paid
+              - generic [ref=f4e168]: "33"
+              - button "View All" [ref=f4e169] [cursor=pointer]
+            - generic [ref=f4e172]:
+              - generic [ref=f4e173]: Due / Unpaid
+              - generic [ref=f4e174]: "115"
+              - button "View All" [ref=f4e175] [cursor=pointer]
+            - generic [ref=f4e178]:
+              - generic [ref=f4e179]: Deactive
+              - generic [ref=f4e180]: "341"
+              - button "View All" [ref=f4e181] [cursor=pointer]
+            - generic [ref=f4e184]:
+              - generic [ref=f4e185]: Needs Review
+              - generic [ref=f4e186]: "13"
+              - button "View All" [ref=f4e187] [cursor=pointer]
+            - generic [ref=f4e190]:
+              - generic [ref=f4e191]: Total Pending
+              - generic [ref=f4e192]: ₹4,400
+              - button "View All" [ref=f4e193] [cursor=pointer]
+          - generic [ref=f4e196]:
+            - generic [ref=f4e197]:
+              - heading "Member Status Distribution" [level=3] [ref=f4e198]
+              - paragraph [ref=f4e199]: Breakdown by current single-source-of-truth status
+              - generic [ref=f4e202]:
+                - img [ref=f4e203]:
+                  - generic [ref=f4e315]:
+                    - generic [ref=f4e316]: "33"
+                    - generic [ref=f4e319]: "115"
+                    - generic [ref=f4e322]: "341"
+                    - generic [ref=f4e325]: "13"
+                - list [ref=f4e329]:
+                  - listitem [ref=f4e330]: Paid
+                  - listitem [ref=f4e333]: Due / Unpaid
+                  - listitem [ref=f4e336]: Deactive
+                  - listitem [ref=f4e339]: Needs review
+            - generic [ref=f4e204]:
+              - heading "Package Distribution" [level=3] [ref=f4e205]
+              - paragraph [ref=f4e206]: Active member enrollment by membership package
+              - img [ref=f4e210]:
+                - generic [ref=f4e343]:
+                  - generic [ref=f4e344]: General Fitness
+                  - generic [ref=f4e346]: Strength Zone
+                - generic [ref=f4e349]:
+                  - generic [ref=f4e350]: "0"
+                  - generic [ref=f4e352]: "80"
+                  - generic [ref=f4e354]: "160"
+                  - generic [ref=f4e356]: "240"
+                  - generic [ref=f4e358]: "320"
+            - generic [ref=f4e214]:
+              - heading "Renewal Timeline" [level=3] [ref=f4e215]
+              - paragraph [ref=f4e216]: Upcoming and recent expiration windows
+              - img [ref=f4e220]:
+                - generic [ref=f4e368]:
+                  - generic [ref=f4e369]: Recently Expired
+                  - generic [ref=f4e371]: Later Renewals
+                - generic [ref=f4e374]:
+                  - generic [ref=f4e375]: "0"
+                  - generic [ref=f4e377]: "30"
+                  - generic [ref=f4e379]: "60"
+                  - generic [ref=f4e381]: "90"
+                  - generic [ref=f4e383]: "120"
+            - generic [ref=f4e224]:
+              - heading "Monthly Payment Trend" [level=3] [ref=f4e225]
+              - paragraph [ref=f4e226]: Collected vs Due amounts by billing month
+              - generic [ref=f4e229]:
+                - img [ref=f4e230]:
+                  - generic [ref=f4e397]:
+                    - generic [ref=f4e398]: 2026-05
+                    - generic [ref=f4e400]: 2026-07
+                    - generic [ref=f4e402]: 2026-09
+                  - generic [ref=f4e235]:
+                    - generic [ref=f4e236]: "0"
+                    - generic [ref=f4e404]: "150000"
+                    - generic [ref=f4e406]: "300000"
+                    - generic [ref=f4e408]: "450000"
+                    - generic [ref=f4e410]: "600000"
+                - list [ref=f4e247]:
+                  - listitem [ref=f4e248]: Paid Amount
+                  - listitem [ref=f4e251]: Due Amount
+            - generic [ref=f4e254]:
+              - heading "New Members Trend" [level=3] [ref=f4e255]
+              - paragraph [ref=f4e256]: Monthly joiners based on member joining dates
+              - img [ref=f4e260]:
+                - generic [ref=f4e443]:
+                  - generic [ref=f4e444]: 2026-04
+                  - generic [ref=f4e446]: 2026-05
+                  - generic [ref=f4e448]: 2026-06
+                  - generic [ref=f4e450]: 2026-07
+                  - generic [ref=f4e452]: 2026-08
+                  - generic [ref=f4e454]: 2026-09
+                - generic [ref=f4e457]:
+                  - generic [ref=f4e458]: "0"
+                  - generic [ref=f4e460]: "6"
+                  - generic [ref=f4e462]: "12"
+                  - generic [ref=f4e464]: "18"
+                  - generic [ref=f4e466]: "24"
+          - generic [ref=f4e264]:
+            - generic [ref=f4e265]:
+              - generic [ref=f4e266]:
+                - generic [ref=f4e267]:
+                  - heading "Renewals Due Soon (Next 30 Days)" [level=2] [ref=f4e268]
+                  - paragraph [ref=f4e269]: Active members approaching renewal date
+                - button "View All Paid" [ref=f4e270] [cursor=pointer]
+              - table [ref=f4e478]:
+                - rowgroup [ref=f4e479]:
+                  - row [ref=f4e480]:
+                    - columnheader "Member" [ref=f4e481]
+                    - columnheader "Register No" [ref=f4e482]
+                    - columnheader "Package" [ref=f4e483]
+                    - columnheader "Renewal Date" [ref=f4e484]
+                    - columnheader "Days Remaining" [ref=f4e485]
+                    - columnheader "Status" [ref=f4e486]
+                    - columnheader "Actions" [ref=f4e487]
+                - rowgroup [ref=f4e488]:
+                  - row [ref=f4e489]:
+                    - cell [ref=f4e490]:
+                      - button "KHILAWAN" [ref=f4e491] [cursor=pointer]
+                    - cell "#471" [ref=f4e492]
+                    - cell "Strength Zone" [ref=f4e493]
+                    - cell "21 Sept 2026" [ref=f4e494]
+                    - cell "0 days remaining" [ref=f4e495]
+                    - cell "Paid" [ref=f4e497]
+                    - cell [ref=f4e499]:
+                      - generic [ref=f4e500]:
+                        - button "Renew" [ref=f4e501] [cursor=pointer]
+                        - button "WhatsApp KHILAWAN" [ref=f4e502] [cursor=pointer]:
+                          - generic [ref=f4e505]: WhatsApp
+                  - row [ref=f4e506]:
+                    - cell [ref=f4e507]:
+                      - button "LOGESH" [ref=f4e508] [cursor=pointer]
+                    - cell "#470" [ref=f4e509]
+                    - cell "Strength Zone" [ref=f4e510]
+                    - cell "21 Sept 2026" [ref=f4e511]
+                    - cell "0 days remaining" [ref=f4e512]
+                    - cell "Paid" [ref=f4e514]
+                    - cell [ref=f4e516]:
+                      - generic [ref=f4e517]:
+                        - button "Renew" [ref=f4e518] [cursor=pointer]
+                        - button "WhatsApp LOGESH" [ref=f4e519] [cursor=pointer]:
+                          - generic [ref=f4e522]: WhatsApp
+                  - row [ref=f4e523]:
+                    - cell [ref=f4e524]:
+                      - button "SYRYA M" [ref=f4e525] [cursor=pointer]
+                    - cell "#469" [ref=f4e526]
+                    - cell "Strength Zone" [ref=f4e527]
+                    - cell "21 Sept 2026" [ref=f4e528]
+                    - cell "0 days remaining" [ref=f4e529]
+                    - cell "Paid" [ref=f4e531]
+                    - cell [ref=f4e533]:
+                      - generic [ref=f4e534]:
+                        - button "Renew" [ref=f4e535] [cursor=pointer]
+                        - button "WhatsApp SYRYA M" [ref=f4e536] [cursor=pointer]:
+                          - generic [ref=f4e539]: WhatsApp
+                  - row [ref=f4e540]:
+                    - cell [ref=f4e541]:
+                      - button "MAHALAKSHMI M" [ref=f4e542] [cursor=pointer]
+                    - cell "#429" [ref=f4e543]
+                    - cell "General Fitness" [ref=f4e544]
+                    - cell "21 Sept 2026" [ref=f4e545]
+                    - cell "0 days remaining" [ref=f4e546]
+                    - cell "Paid" [ref=f4e548]
+                    - cell [ref=f4e550]:
+                      - generic [ref=f4e551]:
+                        - button "Renew" [ref=f4e552] [cursor=pointer]
+                        - button "WhatsApp MAHALAKSHMI M" [ref=f4e553] [cursor=pointer]:
+                          - generic [ref=f4e556]: WhatsApp
+                  - row [ref=f4e557]:
+                    - cell [ref=f4e558]:
+                      - button "RAJESH S" [ref=f4e559] [cursor=pointer]
+                    - cell "#172" [ref=f4e560]
+                    - cell "General Fitness" [ref=f4e561]
+                    - cell "21 Sept 2026" [ref=f4e562]
+                    - cell "0 days remaining" [ref=f4e563]
+                    - cell "Paid" [ref=f4e565]
+                    - cell [ref=f4e567]:
+                      - generic [ref=f4e568]:
+                        - button "Renew" [ref=f4e569] [cursor=pointer]
+                        - button "WhatsApp RAJESH S" [ref=f4e570] [cursor=pointer]:
+                          - generic [ref=f4e573]: WhatsApp
+            - generic [ref=f4e279]:
+              - generic [ref=f4e280]:
+                - generic [ref=f4e281]:
+                  - heading "Recently Expired (Due / Unpaid)" [level=2] [ref=f4e282]
+                  - paragraph [ref=f4e283]: Expired within the last 2 completed calendar months window
+                - button "View All Due / Unpaid" [ref=f4e284] [cursor=pointer]
+              - table [ref=f4e575]:
+                - rowgroup [ref=f4e576]:
+                  - row [ref=f4e577]:
+                    - columnheader "Member" [ref=f4e578]
+                    - columnheader "Register No" [ref=f4e579]
+                    - columnheader "Package" [ref=f4e580]
+                    - columnheader "Expired Date" [ref=f4e581]
+                    - columnheader "Pending" [ref=f4e582]
+                    - columnheader "Actions" [ref=f4e583]
+                - rowgroup [ref=f4e584]:
+                  - row [ref=f4e585]:
+                    - cell [ref=f4e586]:
+                      - button "YOGESH G" [ref=f4e587] [cursor=pointer]
+                    - cell "#498" [ref=f4e588]
+                    - cell "General Fitness" [ref=f4e589]
+                    - cell "20 Sept 2026" [ref=f4e590]
+                    - cell "₹0" [ref=f4e591]
+                    - cell [ref=f4e592]:
+                      - generic [ref=f4e593]:
+                        - button "Renew Now" [ref=f4e594] [cursor=pointer]
+                        - button "WhatsApp YOGESH G" [ref=f4e595] [cursor=pointer]:
+                          - generic [ref=f4e598]: WhatsApp
+                  - row [ref=f4e599]:
+                    - cell [ref=f4e600]:
+                      - button "CHANDASH" [ref=f4e601] [cursor=pointer]
+                    - cell "#497" [ref=f4e602]
+                    - cell "Strength Zone" [ref=f4e603]
+                    - cell "18 Sept 2026" [ref=f4e604]
+                    - cell "₹0" [ref=f4e605]
+                    - cell [ref=f4e606]:
+                      - generic [ref=f4e607]:
+                        - button "Renew Now" [ref=f4e608] [cursor=pointer]
+                        - button "WhatsApp CHANDASH" [ref=f4e609] [cursor=pointer]:
+                          - generic [ref=f4e612]: WhatsApp
+                  - row [ref=f4e613]:
+                    - cell [ref=f4e614]:
+                      - button "SUSHIL TANADAN" [ref=f4e615] [cursor=pointer]
+                    - cell "#496" [ref=f4e616]
+                    - cell "Strength Zone" [ref=f4e617]
+                    - cell "18 Sept 2026" [ref=f4e618]
+                    - cell "₹0" [ref=f4e619]
+                    - cell [ref=f4e620]:
+                      - generic [ref=f4e621]:
+                        - button "Renew Now" [ref=f4e622] [cursor=pointer]
+                        - button "WhatsApp SUSHIL TANADAN" [ref=f4e623] [cursor=pointer]:
+                          - generic [ref=f4e626]: WhatsApp
+                  - row [ref=f4e627]:
+                    - cell [ref=f4e628]:
+                      - button "RITHIKA M" [ref=f4e629] [cursor=pointer]
+                    - cell "#495" [ref=f4e630]
+                    - cell "General Fitness" [ref=f4e631]
+                    - cell "18 Sept 2026" [ref=f4e632]
+                    - cell "₹0" [ref=f4e633]
+                    - cell [ref=f4e634]:
+                      - generic [ref=f4e635]:
+                        - button "Renew Now" [ref=f4e636] [cursor=pointer]
+                        - button "WhatsApp RITHIKA M" [ref=f4e637] [cursor=pointer]:
+                          - generic [ref=f4e640]: WhatsApp
+                  - row [ref=f4e641]:
+                    - cell [ref=f4e642]:
+                      - button "KARTHICK S" [ref=f4e643] [cursor=pointer]
+                    - cell "#494" [ref=f4e644]
+                    - cell "Strength Zone" [ref=f4e645]
+                    - cell "17 Sept 2026" [ref=f4e646]
+                    - cell "₹0" [ref=f4e647]
+                    - cell [ref=f4e648]:
+                      - generic [ref=f4e649]:
+                        - button "Renew Now" [ref=f4e650] [cursor=pointer]
+                        - button "WhatsApp KARTHICK S" [ref=f4e651] [cursor=pointer]:
+                          - generic [ref=f4e654]: WhatsApp
+            - generic [ref=f4e290]:
+              - generic [ref=f4e291]:
+                - generic [ref=f4e292]:
+                  - heading "Deactive Members" [level=2] [ref=f4e293]
+                  - paragraph [ref=f4e294]: Expired prior to the two-month window (long lapsed)
+                - button "View All Deactive" [ref=f4e295] [cursor=pointer]
+              - table [ref=f4e656]:
+                - rowgroup [ref=f4e657]:
+                  - row [ref=f4e658]:
+                    - columnheader "Member" [ref=f4e659]
+                    - columnheader "Register No" [ref=f4e660]
+                    - columnheader "Package" [ref=f4e661]
+                    - columnheader "Expired Date" [ref=f4e662]
+                    - columnheader "Actions" [ref=f4e663]
+                - rowgroup [ref=f4e664]:
+                  - row [ref=f4e665]:
+                    - cell [ref=f4e666]:
+                      - button "CHARAN SAAI B" [ref=f4e667] [cursor=pointer]
+                    - cell "#437" [ref=f4e668]
+                    - cell "General Fitness" [ref=f4e669]
+                    - cell "27 Jun 2026" [ref=f4e670]
+                    - cell [ref=f4e671]:
+                      - generic [ref=f4e672]:
+                        - button "Reactivate" [ref=f4e673] [cursor=pointer]
+                        - button "WhatsApp CHARAN SAAI B" [ref=f4e674] [cursor=pointer]:
+                          - generic [ref=f4e677]: WhatsApp
+                  - row [ref=f4e678]:
+                    - cell [ref=f4e679]:
+                      - button "LAWSOU JERRY K" [ref=f4e680] [cursor=pointer]
+                    - cell "#432" [ref=f4e681]
+                    - cell "Strength Zone" [ref=f4e682]
+                    - cell "05 Jun 2026" [ref=f4e683]
+                    - cell [ref=f4e684]:
+                      - generic [ref=f4e685]:
+                        - button "Reactivate" [ref=f4e686] [cursor=pointer]
+                        - button "WhatsApp LAWSOU JERRY K" [ref=f4e687] [cursor=pointer]:
+                          - generic [ref=f4e690]: WhatsApp
+                  - row [ref=f4e691]:
+                    - cell [ref=f4e692]:
+                      - button "MELKIN MATHEW G" [ref=f4e693] [cursor=pointer]
+                    - cell "#428" [ref=f4e694]
+                    - cell "Strength Zone" [ref=f4e695]
+                    - cell "21 Jun 2026" [ref=f4e696]
+                    - cell [ref=f4e697]:
+                      - generic [ref=f4e698]:
+                        - button "Reactivate" [ref=f4e699] [cursor=pointer]
+                        - button "WhatsApp MELKIN MATHEW G" [ref=f4e700] [cursor=pointer]:
+                          - generic [ref=f4e703]: WhatsApp
+                  - row [ref=f4e704]:
+                    - cell [ref=f4e705]:
+                      - button "VALLARASU R" [ref=f4e706] [cursor=pointer]
+                    - cell "#427" [ref=f4e707]
+                    - cell "General Fitness" [ref=f4e708]
+                    - cell "20 Jun 2026" [ref=f4e709]
+                    - cell [ref=f4e710]:
+                      - generic [ref=f4e711]:
+                        - button "Reactivate" [ref=f4e712] [cursor=pointer]
+                        - button "WhatsApp VALLARASU R" [ref=f4e713] [cursor=pointer]:
+                          - generic [ref=f4e716]: WhatsApp
+                  - row [ref=f4e717]:
+                    - cell [ref=f4e718]:
+                      - button "NISHWIK B" [ref=f4e719] [cursor=pointer]
+                    - cell "#425" [ref=f4e720]
+                    - cell "Strength Zone" [ref=f4e721]
+                    - cell "13 Jun 2026" [ref=f4e722]
+                    - cell [ref=f4e723]:
+                      - generic [ref=f4e724]:
+                        - button "Reactivate" [ref=f4e725] [cursor=pointer]
+                        - button "WhatsApp NISHWIK B" [ref=f4e726] [cursor=pointer]:
+                          - generic [ref=f4e729]: WhatsApp
+            - generic [ref=f4e730]:
+              - generic [ref=f4e731]:
+                - generic [ref=f4e732]:
+                  - heading "Needs Review (Payment Exception)" [level=2] [ref=f4e733]
+                  - paragraph [ref=f4e734]: Members with unresolved needs_review payment records
+                - button "View All Needs Review" [ref=f4e735] [cursor=pointer]
+              - table [ref=f4e737]:
+                - rowgroup [ref=f4e738]:
+                  - row [ref=f4e739]:
+                    - columnheader "Member" [ref=f4e740]
+                    - columnheader "Register No" [ref=f4e741]
+                    - columnheader "Package" [ref=f4e742]
+                    - columnheader "Issue Reason" [ref=f4e743]
+                    - columnheader "Actions" [ref=f4e744]
+                - rowgroup [ref=f4e745]:
+                  - row [ref=f4e746]:
+                    - cell [ref=f4e747]:
+                      - button "DANIEL R" [ref=f4e748] [cursor=pointer]
+                    - cell "#109" [ref=f4e749]
+                    - cell "Strength Zone" [ref=f4e750]
+                    - cell "Unresolved needs_review payment record" [ref=f4e751]
+                    - cell [ref=f4e752]:
+                      - button "Inspect Record" [ref=f4e753] [cursor=pointer]
+                  - row [ref=f4e754]:
+                    - cell [ref=f4e755]:
+                      - button "DIVAKAR M" [ref=f4e756] [cursor=pointer]
+                    - cell "#108" [ref=f4e757]
+                    - cell "General Fitness" [ref=f4e758]
+                    - cell "Unresolved needs_review payment record" [ref=f4e759]
+                    - cell [ref=f4e760]:
+                      - button "Inspect Record" [ref=f4e761] [cursor=pointer]
+                  - row [ref=f4e762]:
+                    - cell [ref=f4e763]:
+                      - button "SANJAN V" [ref=f4e764] [cursor=pointer]
+                    - cell "#107" [ref=f4e765]
+                    - cell "Strength Zone" [ref=f4e766]
+                    - cell "Unresolved needs_review payment record" [ref=f4e767]
+                    - cell [ref=f4e768]:
+                      - button "Inspect Record" [ref=f4e769] [cursor=pointer]
+                  - row [ref=f4e770]:
+                    - cell [ref=f4e771]:
+                      - button "RAMESH S" [ref=f4e772] [cursor=pointer]
+                    - cell "#106" [ref=f4e773]
+                    - cell "General Fitness" [ref=f4e774]
+                    - cell "Unresolved needs_review payment record" [ref=f4e775]
+                    - cell [ref=f4e776]:
+                      - button "Inspect Record" [ref=f4e777] [cursor=pointer]
+                  - row [ref=f4e778]:
+                    - cell [ref=f4e779]:
+                      - button "NITHISH KUMAR S" [ref=f4e780] [cursor=pointer]
+                    - cell "#105" [ref=f4e781]
+                    - cell "Strength Zone" [ref=f4e782]
+                    - cell "Unresolved needs_review payment record" [ref=f4e783]
+                    - cell [ref=f4e784]:
+                      - button "Inspect Record" [ref=f4e785] [cursor=pointer]
+  - generic [aria-hidden] [ref=f4e304]: "24"

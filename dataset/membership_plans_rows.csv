@@ -1,0 +1,10 @@
+id,plan_code,plan_name,description,duration_months,price,registration_fee,created_at
+10,G/F,General Fitness,Cardio; Weight Loss / Gain; Nutrition; Aerobic & Anaerobic,1,1000.00,200.00,2026-09-10 09:24:38.019162+00
+11,G/F,General Fitness,Cardio; Weight Loss / Gain; Nutrition; Aerobic & Anaerobic,3,3000.00,200.00,2026-09-10 09:24:38.019162+00
+12,G/F,General Fitness,Cardio; Weight Loss / Gain; Nutrition; Aerobic & Anaerobic,6,6000.00,200.00,2026-09-10 09:24:38.019162+00
+13,G/F,General Fitness,Cardio; Weight Loss / Gain; Nutrition; Aerobic & Anaerobic,12,9000.00,200.00,2026-09-10 09:24:38.019162+00
+14,S/Z,Strength Zone,,1,800.00,0.00,2026-09-10 09:24:38.019162+00
+15,S/Z,Strength Zone,,3,2300.00,0.00,2026-09-10 09:24:38.019162+00
+16,S/Z,Strength Zone,,6,4500.00,0.00,2026-09-10 09:24:38.019162+00
+17,S/Z,Strength Zone,,12,8000.00,0.00,2026-09-10 09:24:38.019162+00
+18,PT,Personal Training,,1,3000.00,0.00,2026-09-10 09:24:38.019162+00
