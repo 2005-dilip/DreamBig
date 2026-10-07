@@ -92,7 +92,10 @@ export async function getPlans(): Promise<AnyRow[]> {
     .order("duration_months", { ascending: true })
     .limit(100);
   throwIf(error, "Failed to load membership plans");
-  return data ?? [];
+  return (data ?? []).map(p => ({
+    ...p,
+    registration_fee: Number(p.registration_fee) > 0 ? Number(p.registration_fee) : 200,
+  }));
 }
 
 export async function getBalanceSheet(limit = 100): Promise<AnyRow[]> {
@@ -779,7 +782,7 @@ export function toPlanOptions(rows: AnyRow[] | undefined): PlanOption[] {
       plan_name: String(r.plan_name ?? ""),
       duration_months: Number(r.duration_months ?? 0),
       price: Number(r.price ?? 0),
-      registration_fee: Number.isFinite(fee) && fee >= 0 ? fee : 0,
+      registration_fee: Number.isFinite(fee) && fee > 0 ? fee : 200,
     };
   });
 }
@@ -853,6 +856,7 @@ export type CreateMemberInput = {
   name: string;
   mobile_no: string;
   address: string;
+  date_of_birth?: string | null;
   date_of_joining: string; // YYYY-MM-DD
   renewal_date: string;    // YYYY-MM-DD (calculated)
   package_code: string;
@@ -904,7 +908,11 @@ export async function createMemberWithInitialPayment(input: CreateMemberInput): 
     p_personal_training: input.personal_training ?? null,
   });
   if (error) throw new Error(mapCreateError(error.message));
-  return Number(data);
+  const createdNo = Number(data);
+  if (input.date_of_birth) {
+    await updateMember(createdNo, { date_of_birth: input.date_of_birth });
+  }
+  return createdNo;
 }
 
 /** Map delete-RPC errors to clean, user-facing messages. */

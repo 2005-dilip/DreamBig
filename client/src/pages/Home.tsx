@@ -1174,9 +1174,10 @@ function EditMemberForm({ member, onDone }: { member: AnyRow; onDone: () => void
   const mutation = useMutation({ mutationFn: (patch: Parameters<typeof updateMember>[1]) => updateMember(Number(member.register_no), patch), onSuccess: () => { toast.success("Member profile updated."); onDone(); }, onError: (error: any) => toast.error(error.message) });
   const [name, setName] = useState(member.name || "");
   const [mobile, setMobile] = useState(member.mobile_no || "");
+  const [dob, setDob] = useState(String(member.date_of_birth || "").slice(0, 10));
   const [address, setAddress] = useState(member.address || "");
   const [renewal, setRenewal] = useState(String(member.renewal_date || "").slice(0, 10));
-  return <div className="mt-6 rounded-xl bg-[#f7faf8] p-4"><div className="text-sm font-bold mb-4">Edit current member information</div><div className="space-y-3"><label className="block text-xs font-bold">Name<input className="input mt-1" value={name} onChange={e => setName(e.target.value)} /></label><label className="block text-xs font-bold">Mobile<input className="input mt-1" value={mobile} onChange={e => setMobile(e.target.value)} /></label><label className="block text-xs font-bold">Renewal date<input className="input mt-1" type="date" value={renewal} onChange={e => setRenewal(e.target.value)} /></label><label className="block text-xs font-bold">Address<textarea className="input mt-1 py-2 min-h-20" value={address} onChange={e => setAddress(e.target.value)} /></label><button className="btn btn-primary w-full" disabled={mutation.isPending} onClick={() => mutation.mutate({ name, mobile_no: mobile, address, renewal_date: renewal })}>{mutation.isPending ? "Saving…" : "Save current profile"}</button></div></div>;
+  return <div className="mt-6 rounded-xl bg-[#f7faf8] p-4"><div className="text-sm font-bold mb-4">Edit current member information</div><div className="space-y-3"><label className="block text-xs font-bold">Name<input className="input mt-1" value={name} onChange={e => setName(e.target.value)} /></label><label className="block text-xs font-bold">Mobile<input className="input mt-1" value={mobile} onChange={e => setMobile(e.target.value)} /></label><label className="block text-xs font-bold">Date of birth<input className="input mt-1" type="date" value={dob} onChange={e => setDob(e.target.value)} /></label><label className="block text-xs font-bold">Renewal date<input className="input mt-1" type="date" value={renewal} onChange={e => setRenewal(e.target.value)} /></label><label className="block text-xs font-bold">Address<textarea className="input mt-1 py-2 min-h-20" value={address} onChange={e => setAddress(e.target.value)} /></label><button className="btn btn-primary w-full" disabled={mutation.isPending} onClick={() => mutation.mutate({ name, mobile_no: mobile, date_of_birth: dob || null, address, renewal_date: renewal })}>{mutation.isPending ? "Saving…" : "Save current profile"}</button></div></div>;
 }
 
 const DURATION_LABEL: Record<number, string> = { 1: "1 Month", 3: "3 Months", 6: "6 Months", 12: "12 Months" };
@@ -1189,6 +1190,7 @@ function AddMemberModal({ onClose, onDone, plans }: { onClose: () => void; onDon
   const [registerNo, setRegisterNo] = useState("");
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
+  const [dob, setDob] = useState("");
   const [packageName, setPackageName] = useState("");
   const [duration, setDuration] = useState<number | "">("");
   const [joining, setJoining] = useState(todayIso);
@@ -1229,6 +1231,7 @@ function AddMemberModal({ onClose, onDone, plans }: { onClose: () => void; onDon
       name: name.trim(),
       mobile_no: mobile.trim(),
       address: address.trim(),
+      date_of_birth: dob || null,
       date_of_joining: joining,
       renewal_date: renewalDate,
       package_code: selectedPlan!.plan_code,
@@ -1262,6 +1265,7 @@ function AddMemberModal({ onClose, onDone, plans }: { onClose: () => void; onDon
       <label className="block text-xs font-bold">Register no *<input className={autoAllocate ? ro : "input mt-1"} data-testid="register-no" type="text" inputMode="numeric" readOnly={autoAllocate} value={registerNo} onChange={e => update(e.target.value)} placeholder="e.g. 502" />{err(!regValid, "Register number must be a positive whole number.")}</label>
       <label className="block text-xs font-bold">Full name *<input className="input mt-1" data-testid="name" value={name} onChange={e => setName(e.target.value)} />{err(!nameValid, "Full name is required.")}</label>
       <label className="block text-xs font-bold">Mobile no *<input className="input mt-1" data-testid="mobile" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="10-digit number" />{err(!mobileValid, "Enter a valid 10-digit Indian mobile number.")}</label>
+      <label className="block text-xs font-bold">Date of birth<input className="input mt-1" data-testid="dob" type="date" value={dob} onChange={e => setDob(e.target.value)} /></label>
       <label className="block text-xs font-bold">Package *<select className="select mt-1" data-testid="package" value={packageName} onChange={e => { setPackageName(e.target.value); setDuration(""); }}><option value="">Select package</option>{packageNames.map(p => <option key={p}>{p}</option>)}</select>{err(!packageValid, "Please select a package.")}</label>
       <label className="block text-xs font-bold">Membership duration *<select className="select mt-1" data-testid="duration" value={duration} onChange={e => setDuration(e.target.value ? Number(e.target.value) : "")} disabled={!packageName}><option value="">Select duration</option>{durations.map(d => <option key={d} value={d}>{DURATION_LABEL[d] || `${d} Months`}</option>)}</select>{err(!durationValid, "Please select membership duration.")}</label>
       <label className="block text-xs font-bold">Plan amount<input className={ro} data-testid="plan-amount" readOnly value={selectedPlan ? money(planAmount) : "—"} /></label>
