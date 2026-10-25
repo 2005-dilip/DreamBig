@@ -380,7 +380,19 @@ function Header({ page, setPage, onAdd }: { page: PageKey; setPage: (page: PageK
 
 function DataAccessNotice({ status, error }: { status?: string; error?: any }) {
   if (!error && status !== "empty_or_blocked") return null;
-  return <div className="data-alert flex gap-3 items-start mb-5"><AlertCircle size={18} className="mt-0.5 shrink-0" /><div><div className="font-semibold">Supabase owner session needs attention</div><div className="mt-1">{error ? "The live query could not complete. Check the Supabase authenticated session and RLS policies." : "The authenticated SELECT policies are present, but no rows are visible for this owner session yet. Confirm the signed-in user has access under your RLS policies."}</div></div></div>;
+  return (
+    <div className="data-alert flex gap-3 items-start mb-5">
+      <AlertCircle size={18} className="mt-0.5 shrink-0" />
+      <div>
+        <div className="font-semibold">{error ? "Database error" : "Supabase data notice"}</div>
+        <div className="mt-1">
+          {error
+            ? (error.message || "The live query could not complete. Check the Supabase authenticated session and RLS policies.")
+            : "No records found in this view. If you just connected a new project, verify that records exist and your account has access."}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DashboardPage({
@@ -911,7 +923,7 @@ function PaymentsPage({
         <WalletCards size={14} /> {money(filtered.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0))} collected
       </div>
     </div>
-    <DataAccessNotice error={error} status={!loading && !payments?.length ? "empty_or_blocked" : undefined} />
+    <DataAccessNotice error={error} />
     <div className="card p-4 mb-4">
       <div className="filter-row">
         <div className="relative">
