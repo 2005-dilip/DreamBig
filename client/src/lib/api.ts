@@ -65,7 +65,7 @@ export async function getMemberDetail(registerNo: number): Promise<{ member: Any
       .eq("register_no", registerNo)
       .order("billing_month", { ascending: false })
       .order("id", { ascending: false })
-      .limit(120),
+      .limit(500),
   ]);
   throwIf(memberRes.error, "Failed to load member");
   throwIf(paymentsRes.error, "Failed to load payment history");
@@ -79,7 +79,7 @@ export async function getPaymentHistory(registerNo: number): Promise<AnyRow[]> {
     .eq("register_no", registerNo)
     .order("billing_month", { ascending: false })
     .order("id", { ascending: false })
-    .limit(120);
+    .limit(500);
   throwIf(error, "Failed to load payment history");
   return data ?? [];
 }
@@ -98,6 +98,17 @@ export async function getPlans(): Promise<AnyRow[]> {
   }));
 }
 
+export type BalanceSheetRow = {
+  month: string;
+  new_join: number;
+  renewal: number;
+  gym_expenses: number;
+  amount: number;
+  total: number;
+  is_live?: boolean;
+  expenses_entered?: boolean;
+};
+
 export async function getBalanceSheet(limit = 100): Promise<AnyRow[]> {
   const { data, error } = await supabase
     .from("balance_sheet")
@@ -106,6 +117,288 @@ export async function getBalanceSheet(limit = 100): Promise<AnyRow[]> {
     .limit(limit);
   throwIf(error, "Failed to load balance sheet");
   return data ?? [];
+}
+
+/**
+ * Intelligent live balance sheet:
+ * 1. Preserves all existing historical records in public.balance_sheet untouched.
+ * 2. Dynamically aggregates counts and collections for current and ongoing months (>= 2026-09-01).
+ * 3. Incorporates manually recorded gym expenses to compute live net totals.
+ */
+export async function getLiveBalanceSheet(): Promise<BalanceSheetRow[]> {
+  const [dbRes, recentPaymentsRes, recentMembersRes] = await Promise.all([
+    supabase.from("balance_sheet").select("*").order("month", { ascending: false }),
+    supabase.from("payments").select("*").gte("billing_month", "2026-09-01"),
+    supabase.from("members").select("*").gte("date_of_joining", "2026-09-01"),
+  ]);
+
+  throwIf(dbRes.error, "Failed to load balance sheet records");
+  throwIf(recentPaymentsRes.error, "Failed to load recent payments for live balance");
+  throwIf(recentMembersRes.error, "Failed to load recent members for live balance");
+
+  const dbRows = (dbRes.data ?? []) as AnyRow[];
+  const dbMap = new Map<string, AnyRow>();
+  for (const r of dbRows) {
+    dbMap.set(dateOnly(r.month), r);
+  }
+
+  const recentPayments = recentPaymentsRes.data ?? [];
+  const recentMembers = recentMembersRes.data ?? [];
+
+  // Determine all ongoing/live months:
+  // 1. Automatically generate all consecutive calendar months from 2026-09-01 up to the current real-world month
+  const now = new Date();
+  const liveMonthsSet = new Set<string>();
+
+  const startYear = 2026;
+  const startMonthNum = 9; // September 2026 (start of live dynamic period)
+  const nowYear = now.getFullYear();
+  const nowMonthNum = now.getMonth() + 1;
+
+  for (let y = startYear; y <= nowYear; y++) {
+    const firstM = y === startYear ? startMonthNum : 1;
+    const lastM = y === nowYear ? nowMonthNum : 12;
+    for (let m = firstM; m <= lastM; m++) {
+      liveMonthsSet.add(`${y}-${String(m).padStart(2, "0")}-01`);
+    }
+  }
+
+  // 2. Also include any future months that already have advance payments or admissions recorded
+  for (const p of recentPayments) {
+    if (p.billing_month) liveMonthsSet.add(dateOnly(p.billing_month));
+  }
+  for (const m of recentMembers) {
+    if (m.date_of_joining) {
+      liveMonthsSet.add(`${dateOnly(m.date_of_joining).slice(0, 7)}-01`);
+    }
+  }
+
+  const result: BalanceSheetRow[] = [];
+
+  // 1. Process live/ongoing months
+  for (const mIso of Array.from(liveMonthsSet)) {
+    const mPrefix = mIso.slice(0, 7);
+    const dbRow = dbMap.get(mIso);
+
+    // Compute live new joins
+    const newJoinRegisterNos = new Set<number>();
+    for (const m of recentMembers) {
+      if (dateOnly(m.date_of_joining).startsWith(mPrefix)) {
+        newJoinRegisterNos.add(Number(m.register_no));
+      }
+    }
+    for (const p of recentPayments) {
+      if (dateOnly(p.billing_month) === mIso && p.source_sheet === "APP_NEW_MEMBER") {
+        newJoinRegisterNos.add(Number(p.register_no));
+      }
+    }
+    const liveNewJoinCount = newJoinRegisterNos.size;
+
+    // Compute live renewals
+    let liveRenewalCount = 0;
+    let liveCollectedAmount = 0;
+
+    for (const p of recentPayments) {
+      if (dateOnly(p.billing_month) === mIso) {
+        liveCollectedAmount += Number(p.paid_amount || 0);
+        if (!newJoinRegisterNos.has(Number(p.register_no))) {
+          liveRenewalCount++;
+        }
+      }
+    }
+
+    const expenses = dbRow ? Number(dbRow.gym_expenses || 0) : 0;
+    const netTotal = liveCollectedAmount - expenses;
+
+    result.push({
+      month: mIso,
+      new_join: liveNewJoinCount,
+      renewal: liveRenewalCount,
+      gym_expenses: expenses,
+      amount: liveCollectedAmount,
+      total: netTotal,
+      is_live: true,
+      expenses_entered: Boolean(dbRow && Number(dbRow.gym_expenses) > 0),
+    });
+  }
+
+  // 2. Include all historical rows (< 2026-09-01) exactly as stored
+  for (const r of dbRows) {
+    const mIso = dateOnly(r.month);
+    if (!liveMonthsSet.has(mIso)) {
+      result.push({
+        month: mIso,
+        new_join: Number(r.new_join || 0),
+        renewal: Number(r.renewal || 0),
+        gym_expenses: Number(r.gym_expenses || 0),
+        amount: Number(r.amount || 0),
+        total: Number(r.total || 0),
+        is_live: false,
+        expenses_entered: true,
+      });
+    }
+  }
+
+  // Sort by month descending
+  result.sort((a, b) => b.month.localeCompare(a.month));
+  return result;
+}
+
+export type MonthlyExpenseInput = {
+  month: string;
+  gym_expenses: number;
+};
+
+export async function upsertMonthlyExpenses(input: MonthlyExpenseInput): Promise<AnyRow> {
+  const mIso = input.month.length === 7 ? `${input.month}-01` : input.month;
+  const mPrefix = mIso.slice(0, 7);
+
+  // Compute live counts and collections for this month
+  const [paymentsRes, membersRes] = await Promise.all([
+    supabase.from("payments").select("*").eq("billing_month", mIso),
+    supabase.from("members").select("*"),
+  ]);
+
+  throwIf(paymentsRes.error, "Failed to load payments for expense recording");
+  throwIf(membersRes.error, "Failed to load members for expense recording");
+
+  const payments = paymentsRes.data ?? [];
+  const members = membersRes.data ?? [];
+
+  const newJoinNos = new Set<number>();
+  for (const m of members) {
+    if (m.date_of_joining && dateOnly(m.date_of_joining).startsWith(mPrefix)) {
+      newJoinNos.add(Number(m.register_no));
+    }
+  }
+  for (const p of payments) {
+    if (p.source_sheet === "APP_NEW_MEMBER") {
+      newJoinNos.add(Number(p.register_no));
+    }
+  }
+
+  let totalCollected = 0;
+  let renewalCount = 0;
+  for (const p of payments) {
+    totalCollected += Number(p.paid_amount || 0);
+    if (!newJoinNos.has(Number(p.register_no))) {
+      renewalCount++;
+    }
+  }
+
+  const newJoinCount = newJoinNos.size;
+  const netTotal = totalCollected - input.gym_expenses;
+
+  const { data, error } = await supabase
+    .from("balance_sheet")
+    .upsert(
+      {
+        month: mIso,
+        new_join: newJoinCount,
+        renewal: renewalCount,
+        gym_expenses: input.gym_expenses,
+        amount: totalCollected,
+        total: netTotal,
+      },
+      { onConflict: "month" }
+    )
+    .select("*")
+    .single();
+
+  throwIf(error, "Failed to save monthly balance sheet expenses");
+  return data as AnyRow;
+}
+
+export type MonthlyRosterData = {
+  month: string;
+  newJoins: AnyRow[];
+  renewals: AnyRow[];
+  totalCollected: number;
+  totalPending: number;
+};
+
+export async function getMonthlyRoster(monthIso: string): Promise<MonthlyRosterData> {
+  const mIso = monthIso.length === 7 ? `${monthIso}-01` : monthIso;
+  const mPrefix = mIso.slice(0, 7);
+
+  const [paymentsRes, membersRes] = await Promise.all([
+    supabase.from("payments").select("*").eq("billing_month", mIso),
+    supabase.from("members").select("*"),
+  ]);
+
+  throwIf(paymentsRes.error, "Failed to load payments for monthly roster");
+  throwIf(membersRes.error, "Failed to load members for monthly roster");
+
+  const monthPayments = paymentsRes.data ?? [];
+  const members = membersRes.data ?? [];
+  const memberMap = new Map<number, AnyRow>();
+  for (const m of members) {
+    memberMap.set(Number(m.register_no), m);
+  }
+
+  const newJoinNos = new Set<number>();
+  const newJoins: AnyRow[] = [];
+
+  for (const m of members) {
+    if (m.date_of_joining && dateOnly(m.date_of_joining).startsWith(mPrefix)) {
+      newJoinNos.add(Number(m.register_no));
+      const pay = monthPayments.find(p => Number(p.register_no) === Number(m.register_no));
+      newJoins.push({
+        ...m,
+        paid_amount: pay?.paid_amount ?? Math.max(0, Number(m.amount) - Number(m.pending_amount || 0)),
+        pending_amount: pay?.pending_amount ?? m.pending_amount ?? 0,
+        payment_status: pay?.payment_status ?? (Number(m.pending_amount) > 0 ? "due_or_unpaid" : "paid"),
+        billing_month: mIso,
+      });
+    }
+  }
+
+  for (const p of monthPayments) {
+    if (p.source_sheet === "APP_NEW_MEMBER" && !newJoinNos.has(Number(p.register_no))) {
+      const m = memberMap.get(Number(p.register_no)) || {};
+      newJoinNos.add(Number(p.register_no));
+      newJoins.push({
+        ...m,
+        ...p,
+        register_no: p.register_no,
+        name: p.name || m.name,
+      });
+    }
+  }
+
+  const renewals: AnyRow[] = [];
+  for (const p of monthPayments) {
+    if (!newJoinNos.has(Number(p.register_no))) {
+      const m = memberMap.get(Number(p.register_no)) || {};
+      renewals.push({
+        ...m,
+        ...p,
+        id: p.id,
+        register_no: p.register_no,
+        name: p.name || m.name,
+        package_name: p.package_name || m.package_name,
+        renewal_date: p.renewal_date || m.renewal_date,
+        paid_amount: p.paid_amount ?? 0,
+        pending_amount: p.pending_amount ?? 0,
+        payment_status: p.payment_status || "paid",
+      });
+    }
+  }
+
+  let totalCollected = 0;
+  let totalPending = 0;
+  for (const p of monthPayments) {
+    totalCollected += Number(p.paid_amount || 0);
+    totalPending += Number(p.pending_amount || 0);
+  }
+
+  return {
+    month: mIso,
+    newJoins,
+    renewals,
+    totalCollected,
+    totalPending,
+  };
 }
 
 export async function getRenewals(): Promise<AnyRow[]> {
@@ -667,6 +960,140 @@ export async function recordPayment(input: RecordPaymentInput): Promise<AnyRow> 
   return data as AnyRow;
 }
 
+export type SettlePendingInput = {
+  register_no: number;
+  payment_id?: number;
+  billing_month?: string;
+  collect_amount: number;
+  notes?: string;
+};
+
+/**
+ * Settles or partially clears a member's outstanding pending balance.
+ * 1. Locates the payment record (e.g. from initial admission or renewal) with pending amount.
+ * 2. Increments paid_amount and decrements pending_amount.
+ * 3. Updates payment_status to 'paid' if fully settled, or keeps 'due_or_unpaid' if partially settled.
+ * 4. Decrements members.pending_amount in public.members.
+ */
+export async function settlePendingBalance(input: SettlePendingInput): Promise<{
+  payment: AnyRow;
+  member: AnyRow;
+}> {
+  const registerNo = Number(input.register_no);
+  const collectAmount = Number(input.collect_amount);
+  if (collectAmount <= 0) {
+    throw new Error("Amount collecting must be greater than 0");
+  }
+
+  // 1. Fetch current member details
+  const memberRes = await supabase
+    .from("members")
+    .select("*")
+    .eq("register_no", registerNo)
+    .single();
+  throwIf(memberRes.error, "Failed to load member for pending settlement");
+  const member = memberRes.data;
+
+  // 2. Locate the specific payment record with pending amount
+  let targetPayment: AnyRow | null = null;
+  if (input.payment_id) {
+    const payRes = await supabase
+      .from("payments")
+      .select("*")
+      .eq("id", input.payment_id)
+      .single();
+    throwIf(payRes.error, "Failed to load payment record");
+    targetPayment = payRes.data;
+  } else {
+    let query = supabase
+      .from("payments")
+      .select("*")
+      .eq("register_no", registerNo);
+
+    if (input.billing_month) {
+      query = query.eq("billing_month", input.billing_month);
+    } else {
+      query = query.gt("pending_amount", 0).order("billing_month", { ascending: false });
+    }
+    const payListRes = await query.limit(1);
+    throwIf(payListRes.error, "Failed to look up pending payment record");
+    targetPayment = payListRes.data?.[0] ?? null;
+  }
+
+  // Fallback to latest payment if none specifically had pending_amount > 0
+  if (!targetPayment) {
+    const latestPay = await supabase
+      .from("payments")
+      .select("*")
+      .eq("register_no", registerNo)
+      .order("billing_month", { ascending: false })
+      .limit(1);
+    throwIf(latestPay.error, "Failed to load any payment record for member");
+    targetPayment = latestPay.data?.[0] ?? null;
+  }
+
+  let updatedPayment: AnyRow;
+
+  if (targetPayment) {
+    const prevPaid = Number(targetPayment.paid_amount || 0);
+    const amountDue = Number(targetPayment.amount_due || (prevPaid + collectAmount));
+    const newPaid = Math.min(amountDue, prevPaid + collectAmount);
+    const newPending = Math.max(0, amountDue - newPaid);
+    const newStatus = newPending === 0 ? "paid" : "due_or_unpaid";
+
+    const updatePayRes = await supabase
+      .from("payments")
+      .update({
+        paid_amount: newPaid,
+        pending_amount: newPending,
+        payment_status: newStatus,
+      })
+      .eq("id", targetPayment.id)
+      .select("*")
+      .single();
+    throwIf(updatePayRes.error, "Failed to update payment record");
+    updatedPayment = updatePayRes.data;
+  } else {
+    const billingMonth = input.billing_month || startOfMonth();
+    const createPayRes = await supabase
+      .from("payments")
+      .insert({
+        register_no: registerNo,
+        name: member.name,
+        billing_month: billingMonth,
+        package_name: member.package_name,
+        amount_due: collectAmount,
+        paid_amount: collectAmount,
+        pending_amount: 0,
+        payment_status: "paid",
+        source_sheet: "SETTLE_PENDING",
+      })
+      .select("*")
+      .single();
+    throwIf(createPayRes.error, "Failed to record settlement payment");
+    updatedPayment = createPayRes.data;
+  }
+
+  // 3. Update member's pending_amount
+  const currentMemberPending = Number(member.pending_amount || 0);
+  const newMemberPending = Math.max(0, currentMemberPending - collectAmount);
+
+  const updateMemberRes = await supabase
+    .from("members")
+    .update({
+      pending_amount: newMemberPending,
+    })
+    .eq("register_no", registerNo)
+    .select("*")
+    .single();
+  throwIf(updateMemberRes.error, "Failed to update member pending balance");
+
+  return {
+    payment: updatedPayment,
+    member: updateMemberRes.data,
+  };
+}
+
 // =============================================================================
 // MEMBER RENEWAL / UPDATE WORKFLOW
 // =============================================================================
@@ -684,13 +1111,19 @@ export type RenewMemberInput = {
   billing_month?: string;
   payment_status: "paid" | "due_or_unpaid" | "needs_review";
   personal_training?: string | null;
+  paid_amount?: number;
+  pending_amount?: number;
 };
 
 export function calculateRenewalDate(
   currentRenewalDate: string | null | undefined,
   durationMonths: number,
+  fromDate?: string,
   now = new Date()
 ): string {
+  if (fromDate) {
+    return addMonthsSafe(fromDate, durationMonths);
+  }
   const todayStr = now.toISOString().slice(0, 10);
   const curStr = currentRenewalDate ? dateOnly(currentRenewalDate) : "";
   const baseDate = curStr && curStr >= todayStr ? curStr : todayStr;
@@ -699,8 +1132,18 @@ export function calculateRenewalDate(
 
 export async function renewMember(input: RenewMemberInput): Promise<AnyRow> {
   const billingMonth = input.billing_month ?? startOfMonth();
-  const pendingAmount = input.payment_status === "paid" ? 0 : input.amount;
-  const paidAmount = input.payment_status === "paid" ? input.amount : 0;
+  const pendingAmount =
+    typeof input.pending_amount === "number"
+      ? input.pending_amount
+      : input.payment_status === "paid"
+      ? 0
+      : input.amount;
+  const paidAmount =
+    typeof input.paid_amount === "number"
+      ? input.paid_amount
+      : input.payment_status === "paid"
+      ? input.amount
+      : 0;
 
   // 1. Fetch current member details
   const memberRes = await supabase

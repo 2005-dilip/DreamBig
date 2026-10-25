@@ -10,6 +10,10 @@ import {
   findPlan,
   formatDate,
   getBalanceSheet,
+  getLiveBalanceSheet,
+  upsertMonthlyExpenses,
+  getMonthlyRoster,
+  getPaymentHistory,
   getDashboardSnapshot,
   getMemberDetail,
   getMembers,
@@ -20,6 +24,7 @@ import {
   planNames,
   recordPayment,
   renewMember,
+  settlePendingBalance,
   startOfMonth,
   summarizeStatuses,
   toPlanOptions,
@@ -28,13 +33,16 @@ import {
   type AnyRow,
   type MemberStatus,
   type MemberWithStatus,
+  type BalanceSheetRow,
+  type MonthlyRosterData,
 } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle, ArrowUpRight, BarChart3, Bell, CalendarDays, Check,
-  ChevronRight, CircleDollarSign, ClipboardList, Clock3, Dumbbell, ExternalLink,
-  Filter, LayoutDashboard, Loader2, Menu, MessageCircle, Package, Plus, RefreshCw,
+  ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, Dumbbell, ExternalLink,
+  Filter, Info, LayoutDashboard, Loader2, Menu, MessageCircle, Package, Plus, RefreshCw,
   Search, Settings2, ShieldCheck, Trash2, UserRound, Users, WalletCards, X, Zap, Send,
+  Receipt,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -228,10 +236,21 @@ function RenewMemberModal({
     [planOptions, selectedPackage, selectedDuration]
   );
 
+  const initialFromDate = useMemo(() => {
+    const curStr = member.renewal_date ? String(member.renewal_date).slice(0, 10) : "";
+    return curStr && curStr >= todayIso ? curStr : todayIso;
+  }, [member.renewal_date]);
+
+  const [fromDate, setFromDate] = useState<string>(initialFromDate);
+
+  useEffect(() => {
+    setFromDate(initialFromDate);
+  }, [initialFromDate]);
+
   const planAmount = selectedPlan?.price ?? Number(member.amount || 0);
   const newRenewalDate = useMemo(
-    () => calculateRenewalDate(member.renewal_date, selectedDuration),
-    [member.renewal_date, selectedDuration]
+    () => (fromDate && selectedDuration ? addMonthsSafe(fromDate, selectedDuration) : ""),
+    [fromDate, selectedDuration]
   );
 
   const mutation = useMutation({
@@ -243,6 +262,7 @@ function RenewMemberModal({
         duration_months: selectedDuration,
         amount: planAmount,
         renewal_date: newRenewalDate,
+        billing_month: fromDate ? `${fromDate.slice(0, 7)}-01` : undefined,
         payment_status: paymentStatus,
       }),
     onSuccess: () => {
@@ -318,10 +338,31 @@ function RenewMemberModal({
             <input className={ro} readOnly value="₹0 (Renewal)" title="Registration fee applies only to new members on first registration" />
           </label>
 
-          <label className="block text-xs font-bold col-span-2">
-            New Renewal Date (Auto Calculated)
-            <input className={ro} readOnly value={date(newRenewalDate)} />
-          </label>
+          <div className="col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-border bg-[#f7faf8]">
+            <label className="block text-xs font-bold">
+              Renewal Start Date (From) *
+              <input
+                className="input mt-1 bg-white font-medium"
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+              />
+            </label>
+            <label className="block text-xs font-bold">
+              New Renewal Date (Valid Until)
+              <input
+                className={ro}
+                readOnly
+                value={newRenewalDate ? date(newRenewalDate) : "—"}
+              />
+            </label>
+            <div className="col-span-full text-[11px] text-[#13795b] font-medium flex items-center gap-1.5 mt-0.5">
+              <CalendarDays size={14} className="shrink-0" />
+              <span>
+                Coverage: <strong>{formatDate(fromDate)}</strong> → <strong>{formatDate(newRenewalDate)}</strong> ({selectedDuration} Month{selectedDuration === 1 ? "" : "s"})
+              </span>
+            </div>
+          </div>
 
           <label className="block text-xs font-bold col-span-2">
             Payment Status for Renewal *
@@ -759,12 +800,190 @@ function StatusSummaryBar({ members, active, onPick }: { members: MemberWithStat
   </div>;
 }
 
+function getMemberSearchRelevance(member: AnyRow, query: string): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 0;
+
+  const regStr = String(member.register_no ?? "").trim();
+  const nameStr = String(member.name ?? "").trim().toLowerCase();
+  const mobileStr = String(member.mobile_no ?? "").trim();
+
+  // 1. Exact match on register number (e.g. searching "385" matches #385)
+  if (regStr === q || Number(regStr) === Number(q)) {
+    return 10000;
+  }
+
+  // 2. Exact match on member name
+  if (nameStr === q) {
+    return 9000;
+  }
+
+  // 3. Register number starts with query (e.g. searching "38" matches #38, #385 before mobile numbers)
+  if (regStr.startsWith(q)) {
+    return 8000 - regStr.length;
+  }
+
+  // 4. Name starts with query (e.g. "dilip" matches "Dilip Kumar")
+  if (nameStr.startsWith(q)) {
+    return 7000;
+  }
+
+  // 5. Any word in the name starts with query (e.g. "kumar" matches "Dilip Kumar")
+  const words = nameStr.split(/\s+/);
+  if (words.some(w => w.startsWith(q))) {
+    return 6000;
+  }
+
+  // 6. Name contains query
+  if (nameStr.includes(q)) {
+    return 5000;
+  }
+
+  // 7. Exact mobile number match
+  if (mobileStr === q) {
+    return 4000;
+  }
+
+  // 8. Mobile number starts with query
+  if (mobileStr.startsWith(q)) {
+    return 3000;
+  }
+
+  // 9. Register number contains query
+  if (regStr.includes(q)) {
+    return 2000;
+  }
+
+  // 10. Mobile number contains query (random substring in 10 digits)
+  if (mobileStr.includes(q)) {
+    return 1000;
+  }
+
+  return 0;
+}
+
+function PaginationControls({
+  currentPage,
+  totalPages,
+  totalItems,
+  startIndex,
+  endIndex,
+  pageSize,
+  pageSizeOptions = [15, 25, 50, 100],
+  onPageChange,
+  onPageSizeChange,
+  itemName = "records",
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  startIndex: number;
+  endIndex: number;
+  pageSize: number;
+  pageSizeOptions?: number[];
+  onPageChange: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  itemName?: string;
+}) {
+  if (totalItems === 0) return null;
+
+  const getPageNumbers = () => {
+    const pages: (number | "...")[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push("...");
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) {
+        if (!pages.includes(i)) pages.push(i);
+      }
+      if (currentPage < totalPages - 2) pages.push("...");
+      if (!pages.includes(totalPages)) pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3.5 border-t border-border bg-[#fafcfb] text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span>
+          Showing <span className="font-bold text-foreground">{totalItems > 0 ? startIndex + 1 : 0}</span> to{" "}
+          <span className="font-bold text-foreground">{endIndex}</span> of{" "}
+          <span className="font-bold text-foreground">{totalItems}</span> {itemName}
+        </span>
+        {onPageSizeChange && (
+          <div className="flex items-center gap-1.5 ml-2">
+            <span>Per page:</span>
+            <select
+              className="select !min-h-[30px] !h-[30px] !py-0 !px-2 text-xs font-semibold bg-white border-border rounded-lg"
+              value={pageSize}
+              onChange={e => onPageSizeChange(Number(e.target.value))}
+            >
+              {pageSizeOptions.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button
+          className="btn btn-ghost !min-h-[32px] !h-[32px] !px-2.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          aria-label="Previous page"
+        >
+          <ChevronLeft size={15} /> Prev
+        </button>
+
+        <div className="flex items-center gap-1">
+          {getPageNumbers().map((p, idx) =>
+            p === "..." ? (
+              <span key={`ellipsis-${idx}`} className="px-1 text-muted-foreground font-bold">
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                className={`min-w-[32px] h-[32px] px-2 rounded-lg font-bold text-xs transition-colors ${
+                  currentPage === p
+                    ? "bg-[#145b43] text-white shadow-sm"
+                    : "border border-transparent hover:border-border hover:bg-white text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => onPageChange(p as number)}
+              >
+                {p}
+              </button>
+            )
+          )}
+        </div>
+
+        <button
+          className="btn btn-ghost !min-h-[32px] !h-[32px] !px-2.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          aria-label="Next page"
+        >
+          Next <ChevronRight size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MembersPage({
   members,
   loading,
   error,
   initialStatusFilter = "all",
   onOpenMember,
+  onOpenPaymentHistory,
+  onSettlePending,
   onRenewMember,
   onOpenWhatsApp,
   onAdd,
@@ -774,6 +993,8 @@ function MembersPage({
   error?: any;
   initialStatusFilter?: string;
   onOpenMember: (member: AnyRow) => void;
+  onOpenPaymentHistory: (member: AnyRow) => void;
+  onSettlePending: (member: AnyRow) => void;
   onRenewMember: (member: AnyRow) => void;
   onOpenWhatsApp: (member: AnyRow) => void;
   onAdd: () => void;
@@ -782,106 +1003,268 @@ function MembersPage({
   const [status, setStatus] = useState(initialStatusFilter);
   const [payment, setPayment] = useState("all");
   const [packageFilter, setPackageFilter] = useState("all");
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
   useEffect(() => {
     setStatus(initialStatusFilter);
   }, [initialStatusFilter]);
 
+  useEffect(() => {
+    setPageNumber(1);
+  }, [search, status, payment, packageFilter]);
+
   const rows = members || [];
   const packages = useMemo(() => Array.from(new Set(rows.map(m => m.package_name).filter(Boolean))), [rows]);
-  const filtered = useMemo(() => rows.filter(member => {
-    const needle = search.toLowerCase();
-    const matchesSearch = !needle || [member.name, member.register_no, member.mobile_no].some(value => String(value ?? "").toLowerCase().includes(needle));
-    const matchesStatus = status === "all" || member.current_status === status;
-    const pending = Number(member.pending_amount || 0);
-    const matchesPayment = payment === "all" || (payment === "pending" && pending > 0) || (payment === "settled" && pending <= 0);
-    return matchesSearch && matchesStatus && matchesPayment && (packageFilter === "all" || member.package_name === packageFilter);
-  }), [rows, search, status, payment, packageFilter]);
 
-  return <div>
-    <div className="page-header">
-      <div>
-        <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">Member directory</div>
-        <h1 className="page-title">Members</h1>
-        <p className="text-sm text-muted-foreground mt-2">Current status is calculated automatically from live payment data — it is never edited by hand.</p>
-      </div>
-      <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> Add member</button>
-    </div>
-    <DataAccessNotice error={error} status={!loading && !rows.length ? "empty_or_blocked" : undefined} />
-    <StatusSummaryBar members={rows} active={status} onPick={setStatus} />
-    <div className="card p-4 mb-4">
-      <div className="filter-row">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-3.5 text-muted-foreground" />
-          <input className="input pl-9" placeholder="Search name, register no, mobile" value={search} onChange={e => setSearch(e.target.value)} />
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const result = rows.filter(member => {
+      const matchesSearch =
+        !needle ||
+        [member.name, member.register_no, member.mobile_no].some(value =>
+          String(value ?? "").toLowerCase().includes(needle)
+        );
+      const matchesStatus = status === "all" || member.current_status === status;
+      const pending = Number(member.pending_amount || 0);
+      const matchesPayment =
+        payment === "all" ||
+        (payment === "pending" && pending > 0) ||
+        (payment === "settled" && pending <= 0);
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPayment &&
+        (packageFilter === "all" || member.package_name === packageFilter)
+      );
+    });
+
+    if (needle) {
+      result.sort((a, b) => {
+        const scoreA = getMemberSearchRelevance(a, needle);
+        const scoreB = getMemberSearchRelevance(b, needle);
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
+        }
+        return Number(b.register_no) - Number(a.register_no);
+      });
+    }
+
+    return result;
+  }, [rows, search, status, payment, packageFilter]);
+
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(pageNumber, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const paginatedRows = useMemo(
+    () => filtered.slice(startIndex, endIndex),
+    [filtered, startIndex, endIndex]
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">
+            Member directory
+          </div>
+          <h1 className="page-title">Members</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            Current status is calculated automatically from live payment data — it is never edited by hand.
+          </p>
         </div>
-        <select className="select" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="all">All current status</option>
-          <option value="Paid">Paid</option>
-          <option value="Due_or_Unpaid">Due / Unpaid</option>
-          <option value="Deactive">Deactive</option>
-          <option value="needs_review">Needs review</option>
-        </select>
-        <select className="select" value={payment} onChange={e => setPayment(e.target.value)}>
-          <option value="all">All payment balance</option>
-          <option value="pending">Has pending amount</option>
-          <option value="settled">Fully paid</option>
-        </select>
-        <select className="select" value={packageFilter} onChange={e => setPackageFilter(e.target.value)}>
-          <option value="all">All packages</option>
-          {packages.map((item: string) => <option key={item}>{item}</option>)}
-        </select>
+        <button className="btn btn-primary" onClick={onAdd}>
+          <Plus size={16} /> Add member
+        </button>
       </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-3">
-        <Filter size={13} /> Showing <span className="font-bold text-foreground">{filtered.length}</span> of {rows.length} records
-        <button className="ml-auto text-primary font-bold" onClick={() => { setSearch(""); setStatus("all"); setPayment("all"); setPackageFilter("all"); }}>Clear filters</button>
+      <DataAccessNotice error={error} status={!loading && !rows.length ? "empty_or_blocked" : undefined} />
+      <StatusSummaryBar members={rows} active={status} onPick={setStatus} />
+      <div className="card p-4 mb-4">
+        <div className="filter-row">
+          <div className="relative">
+            <Search
+              size={15}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <input
+              className="input input-with-icon"
+              placeholder="Search name, register no, mobile"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select className="select" value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="all">All current status</option>
+            <option value="Paid">Paid</option>
+            <option value="Due_or_Unpaid">Due / Unpaid</option>
+            <option value="Deactive">Deactive</option>
+            <option value="needs_review">Needs review</option>
+          </select>
+          <select className="select" value={payment} onChange={e => setPayment(e.target.value)}>
+            <option value="all">All payment balance</option>
+            <option value="pending">Has pending amount</option>
+            <option value="settled">Fully paid</option>
+          </select>
+          <select className="select" value={packageFilter} onChange={e => setPackageFilter(e.target.value)}>
+            <option value="all">All packages</option>
+            {packages.map((item: string) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground mt-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter size={13} /> Showing{" "}
+            <span className="font-bold text-foreground">
+              {totalItems > 0 ? startIndex + 1 : 0}-{endIndex}
+            </span>{" "}
+            of <span className="font-bold text-foreground">{totalItems}</span>{" "}
+            {totalItems === rows.length ? "records" : `filtered records (${rows.length} total)`}
+          </div>
+          {(search || status !== "all" || payment !== "all" || packageFilter !== "all") && (
+            <button
+              className="text-primary font-bold hover:underline"
+              onClick={() => {
+                setSearch("");
+                setStatus("all");
+                setPayment("all");
+                setPackageFilter("all");
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="card overflow-hidden">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Register no</th>
+                <th>Package</th>
+                <th>Renewal</th>
+                <th>Pending</th>
+                <th>Current status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableSkeleton columns={7} />
+              ) : paginatedRows.length ? (
+                paginatedRows.map(member => {
+                  const badge = statusForMember(member);
+                  const hasPending = Number(member.pending_amount) > 0;
+                  return (
+                    <tr key={member.register_no}>
+                      <td>
+                        <button className="flex items-center gap-3 text-left" onClick={() => onOpenMember(member)}>
+                          <Avatar name={member.name} small />
+                          <span>
+                            <span className="block font-semibold">{member.name}</span>
+                            <span className="block text-[11px] text-muted-foreground">
+                              {member.mobile_no || "No mobile"}
+                            </span>
+                          </span>
+                        </button>
+                      </td>
+                      <td className="font-mono text-xs text-muted-foreground">#{member.register_no}</td>
+                      <td>
+                        <div className="font-medium">{member.package_name || "—"}</div>
+                        <div className="text-[11px] text-muted-foreground">{member.package_code || "No code"}</div>
+                      </td>
+                      <td>{date(member.effective_renewal_date ?? member.renewal_date)}</td>
+                      <td>
+                        {hasPending ? (
+                          <button
+                            className="font-bold text-[#b07818] hover:underline cursor-pointer flex items-center gap-1"
+                            title="Click to collect pending balance"
+                            onClick={() => onSettlePending(member)}
+                          >
+                            {money(member.pending_amount)}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">{money(member.pending_amount)}</span>
+                        )}
+                      </td>
+                      <td>
+                        <Badge tone={badge.tone}>{badge.label}</Badge>
+                      </td>
+                      <td>
+                        <div className="flex justify-end gap-2 items-center">
+                          <button
+                            className="h-9 w-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-[#13795b] hover:border-[#13795b] hover:bg-[#e7f4ed] transition-colors"
+                            title={`View entire payment history for ${member.name}`}
+                            onClick={() => onOpenPaymentHistory(member)}
+                            aria-label={`View payment history for ${member.name}`}
+                          >
+                            <Info size={16} />
+                          </button>
+                          {hasPending && (
+                            <button
+                              className="btn btn-ghost !py-1 !px-2.5 text-xs font-semibold text-[#b07818] border border-amber-200 bg-amber-50 hover:bg-amber-100 flex items-center gap-1"
+                              title="Collect pending balance"
+                              onClick={() => onSettlePending(member)}
+                            >
+                              <CircleDollarSign size={13} /> Settle
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-ghost !py-1 !px-2 text-xs"
+                            onClick={() => onRenewMember(member)}
+                          >
+                            Renew
+                          </button>
+                          <WhatsAppButton member={member} onOpen={onOpenWhatsApp} />
+                          <button
+                            className="h-9 w-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary"
+                            onClick={() => onOpenMember(member)}
+                            aria-label={`View ${member.name}`}
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      icon={Users}
+                      title="No members match these filters"
+                      copy="Try clearing a filter or searching a different identifier."
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <PaginationControls
+          currentPage={safePage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          pageSize={pageSize}
+          pageSizeOptions={[15, 25, 50, 100]}
+          onPageChange={setPageNumber}
+          onPageSizeChange={size => {
+            setPageSize(size);
+            setPageNumber(1);
+          }}
+          itemName="members"
+        />
       </div>
     </div>
-    <div className="card overflow-hidden">
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr><th>Member</th><th>Register no</th><th>Package</th><th>Renewal</th><th>Pending</th><th>Current status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            {loading ? <TableSkeleton columns={7} /> : filtered.length ? filtered.map(member => {
-              const badge = statusForMember(member);
-              return <tr key={member.register_no}>
-                <td>
-                  <button className="flex items-center gap-3 text-left" onClick={() => onOpenMember(member)}>
-                    <Avatar name={member.name} small />
-                    <span>
-                      <span className="block font-semibold">{member.name}</span>
-                      <span className="block text-[11px] text-muted-foreground">{member.mobile_no || "No mobile"}</span>
-                    </span>
-                  </button>
-                </td>
-                <td className="font-mono text-xs text-muted-foreground">#{member.register_no}</td>
-                <td>
-                  <div className="font-medium">{member.package_name || "—"}</div>
-                  <div className="text-[11px] text-muted-foreground">{member.package_code || "No code"}</div>
-                </td>
-                <td>{date(member.effective_renewal_date ?? member.renewal_date)}</td>
-                <td className={Number(member.pending_amount) > 0 ? "font-bold text-[#b07818]" : "text-muted-foreground"}>{money(member.pending_amount)}</td>
-                <td><Badge tone={badge.tone}>{badge.label}</Badge></td>
-                <td>
-                  <div className="flex justify-end gap-2">
-                    <button className="btn btn-ghost !py-1 !px-2 text-xs" onClick={() => onRenewMember(member)}>Renew</button>
-                    <WhatsAppButton member={member} onOpen={onOpenWhatsApp} />
-                    <button className="h-9 w-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary" onClick={() => onOpenMember(member)} aria-label={`View ${member.name}`}>
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>;
-            }) : <tr><td colSpan={7}><EmptyState icon={Users} title="No members match these filters" copy="Try clearing a filter or searching a different identifier." /></td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>;
+  );
 }
-
 function PaymentsPage({
   payments,
   members,
@@ -903,91 +1286,226 @@ function PaymentsPage({
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const filtered = useMemo(() => (payments || []).filter(row => {
-    const needle = search.toLowerCase();
-    const isPending = Number(row.pending_amount || 0) > 0 || ["due_or_unpaid", "partial"].includes(String(row.payment_status));
-    return (!needle || [row.name, row.register_no, row.package_name].some(v => String(v ?? "").toLowerCase().includes(needle))) &&
-           (status === "all" || (status === "pending" && isPending) || (status === "paid" && !isPending));
-  }), [payments, search, status]);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
-  const memberFor = (row: AnyRow) => (members || []).find(member => Number(member.register_no) === Number(row.register_no)) || row;
+  useEffect(() => {
+    setPageNumber(1);
+  }, [search, status, monthValue]);
 
-  return <div>
-    <div className="page-header">
-      <div>
-        <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">Collections</div>
-        <h1 className="page-title">Payments</h1>
-        <p className="text-sm text-muted-foreground mt-2">Historical monthly payment records, kept separate from member profiles.</p>
-      </div>
-      <div className="rounded-lg border border-border bg-white px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
-        <WalletCards size={14} /> {money(filtered.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0))} collected
-      </div>
-    </div>
-    <DataAccessNotice error={error} />
-    <div className="card p-4 mb-4">
-      <div className="filter-row">
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-3.5 text-muted-foreground" />
-          <input className="input pl-9" placeholder="Search member, register no, package" value={search} onChange={e => setSearch(e.target.value)} />
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const result = (payments || []).filter(row => {
+      const isPending =
+        Number(row.pending_amount || 0) > 0 ||
+        ["due_or_unpaid", "partial"].includes(String(row.payment_status));
+      const matchesSearch =
+        !needle ||
+        [row.name, row.register_no, row.package_name].some(v =>
+          String(v ?? "").toLowerCase().includes(needle)
+        );
+      const matchesStatus =
+        status === "all" ||
+        (status === "pending" && isPending) ||
+        (status === "paid" && !isPending);
+      return matchesSearch && matchesStatus;
+    });
+
+    if (needle) {
+      result.sort((a, b) => {
+        const scoreA = getMemberSearchRelevance(a, needle);
+        const scoreB = getMemberSearchRelevance(b, needle);
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(b.register_no) - Number(a.register_no);
+      });
+    }
+
+    return result;
+  }, [payments, search, status]);
+
+  const memberFor = (row: AnyRow) =>
+    (members || []).find(member => Number(member.register_no) === Number(row.register_no)) || row;
+
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(pageNumber, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const paginatedRows = useMemo(
+    () => filtered.slice(startIndex, endIndex),
+    [filtered, startIndex, endIndex]
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">Collections</div>
+          <h1 className="page-title">Payments</h1>
+          <p className="text-sm text-muted-foreground mt-2">Historical monthly payment records, kept separate from member profiles.</p>
         </div>
-        <input className="input" type="month" value={monthValue.slice(0, 7)} onChange={e => onMonthChange(`${e.target.value}-01`)} />
-        <select className="select" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="all">All payment status</option>
-          <option value="paid">Paid</option>
-          <option value="pending">Pending / partial</option>
-        </select>
-        <button className="btn btn-ghost" onClick={() => toast.info("Payment records are read-only history. Create a renewal from the member workflow.")}>
-          <Settings2 size={15} /> View rules
-        </button>
+        <div className="rounded-lg border border-border bg-white px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+          <WalletCards size={14} /> {money(filtered.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0))} collected
+        </div>
       </div>
-      <div className="text-xs text-muted-foreground mt-3">
-        {filtered.length} visible records for <span className="font-semibold text-foreground">{date(monthValue).slice(4)}</span>
+      <DataAccessNotice error={error} />
+      <div className="card p-4 mb-4">
+        <div className="filter-row">
+          <div className="relative">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              className="input input-with-icon"
+              placeholder="Search member, register no, package"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <input
+            className="input"
+            type="month"
+            value={monthValue.slice(0, 7)}
+            onChange={e => onMonthChange(`${e.target.value}-01`)}
+          />
+          <select className="select" value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="all">All payment status</option>
+            <option value="paid">Paid</option>
+            <option value="pending">Pending / partial</option>
+          </select>
+          <button
+            className="btn btn-ghost"
+            onClick={() => toast.info("Payment records are read-only history. Create a renewal from the member workflow.")}
+          >
+            <Settings2 size={15} /> View rules
+          </button>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground mt-3 flex-wrap">
+          <div>
+            Showing <span className="font-bold text-foreground">{totalItems > 0 ? startIndex + 1 : 0}-{endIndex}</span> of{" "}
+            <span className="font-bold text-foreground">{totalItems}</span> visible records for{" "}
+            <span className="font-semibold text-foreground">{date(monthValue).slice(4)}</span>
+          </div>
+          {(search || status !== "all") && (
+            <button
+              className="text-primary font-bold hover:underline"
+              onClick={() => {
+                setSearch("");
+                setStatus("all");
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="card overflow-hidden">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Billing month</th>
+                <th>Member</th>
+                <th>Package</th>
+                <th>Renewal</th>
+                <th>Due</th>
+                <th>Paid</th>
+                <th>Pending</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableSkeleton columns={9} />
+              ) : paginatedRows.length ? (
+                paginatedRows.map(row => {
+                  const member = memberFor(row);
+                  const isPending = Number(row.pending_amount || 0) > 0;
+                  return (
+                    <tr key={row.id}>
+                      <td>{shortDate(row.billing_month)}</td>
+                      <td>
+                        <button className="flex items-center gap-2 text-left" onClick={() => onOpenMember(member)}>
+                          <Avatar name={row.name || member.name} small />
+                          <span>
+                            <span className="block font-semibold">{row.name || member.name || "—"}</span>
+                            <span className="text-[11px] text-muted-foreground">#{row.register_no}</span>
+                          </span>
+                        </button>
+                      </td>
+                      <td>{row.package_name || "—"}</td>
+                      <td>{date(row.renewal_date)}</td>
+                      <td>{money(row.amount_due)}</td>
+                      <td className="font-semibold text-[#257651]">{money(row.paid_amount)}</td>
+                      <td className={isPending ? "font-bold text-[#b07818]" : "text-muted-foreground"}>
+                        {money(row.pending_amount)}
+                      </td>
+                      <td>
+                        <Badge tone={isPending ? "amber" : "green"}>
+                          {isPending ? (row.paid_amount ? "Partial" : "Due") : "Paid"}
+                        </Badge>
+                      </td>
+                      <td>
+                        <WhatsAppButton member={member} onOpen={onOpenWhatsApp} />
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={9}>
+                    <EmptyState
+                      icon={WalletCards}
+                      title="No payment records for this view"
+                      copy="Try another month or clear your filters."
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <PaginationControls
+          currentPage={safePage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          pageSize={pageSize}
+          pageSizeOptions={[15, 25, 50, 100]}
+          onPageChange={setPageNumber}
+          onPageSizeChange={size => {
+            setPageSize(size);
+            setPageNumber(1);
+          }}
+          itemName="records"
+        />
       </div>
     </div>
-    <div className="card overflow-hidden">
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr><th>Billing month</th><th>Member</th><th>Package</th><th>Renewal</th><th>Due</th><th>Paid</th><th>Pending</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            {loading ? <TableSkeleton columns={9} /> : filtered.length ? filtered.map(row => {
-              const member = memberFor(row);
-              const isPending = Number(row.pending_amount || 0) > 0;
-              return <tr key={row.id}>
-                <td>{shortDate(row.billing_month)}</td>
-                <td>
-                  <button className="flex items-center gap-2 text-left" onClick={() => onOpenMember(member)}>
-                    <Avatar name={row.name || member.name} small />
-                    <span>
-                      <span className="block font-semibold">{row.name || member.name || "—"}</span>
-                      <span className="text-[11px] text-muted-foreground">#{row.register_no}</span>
-                    </span>
-                  </button>
-                </td>
-                <td>{row.package_name || "—"}</td>
-                <td>{date(row.renewal_date)}</td>
-                <td>{money(row.amount_due)}</td>
-                <td className="font-semibold text-[#257651]">{money(row.paid_amount)}</td>
-                <td className={isPending ? "font-bold text-[#b07818]" : "text-muted-foreground"}>{money(row.pending_amount)}</td>
-                <td><Badge tone={isPending ? "amber" : "green"}>{isPending ? (row.paid_amount ? "Partial" : "Due") : "Paid"}</Badge></td>
-                <td><WhatsAppButton member={member} onOpen={onOpenWhatsApp} /></td>
-              </tr>;
-            }) : <tr><td colSpan={9}><EmptyState icon={WalletCards} title="No payment records for this view" copy="Try another month or clear your filters." /></td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>;
+  );
 }
 
-function TableSkeleton({ columns }: { columns: number }) { return <>{[1, 2, 3, 4].map(row => <tr key={row}>{Array.from({ length: columns }).map((_, column) => <td key={column}><div className="h-4 rounded bg-[#eef2f1] animate-pulse" /></td>)}</tr>)}</>; }
+function TableSkeleton({ columns }: { columns: number }) {
+  return (
+    <>
+      {[1, 2, 3, 4].map(row => (
+        <tr key={row}>
+          {Array.from({ length: columns }).map((_, column) => (
+            <td key={column}>
+              <div className="h-4 rounded bg-[#eef2f1] animate-pulse" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
 
 function RenewalsPage({
   members,
   loading,
   error,
   onOpenMember,
+  onOpenPaymentHistory,
   onRenewMember,
   onOpenWhatsApp,
 }: {
@@ -995,73 +1513,220 @@ function RenewalsPage({
   loading: boolean;
   error?: any;
   onOpenMember: (member: AnyRow) => void;
+  onOpenPaymentHistory?: (member: AnyRow) => void;
   onRenewMember: (member: AnyRow) => void;
   onOpenWhatsApp: (member: AnyRow) => void;
 }) {
+  const [search, setSearch] = useState("");
   const [bucket, setBucket] = useState("all");
-  const rows = useMemo(() => (members || []).filter(member => {
-    const renewal = String(member.effective_renewal_date ?? member.renewal_date ?? "").slice(0, 10);
-    const diff = Math.round((new Date(`${renewal}T00:00:00Z`).getTime() - new Date(`${todayIso}T00:00:00Z`).getTime()) / 86400000);
-    return bucket === "all" || (bucket === "expired" && diff < 0) || (bucket === "today" && diff === 0) || (bucket === "week" && diff >= 0 && diff <= 7) || (bucket === "month" && diff >= 0 && diff <= 30);
-  }).sort((a, b) => String(a.effective_renewal_date ?? a.renewal_date).localeCompare(String(b.effective_renewal_date ?? b.renewal_date))), [members, bucket]);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
-  return <div>
-    <div className="page-header">
-      <div>
-        <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">Retention queue</div>
-        <h1 className="page-title">Renewals</h1>
-        <p className="text-sm text-muted-foreground mt-2">A focused follow-up list for members who are due or overdue.</p>
+  useEffect(() => {
+    setPageNumber(1);
+  }, [bucket, search]);
+
+  const rows = useMemo(() => {
+    const raw = (members || []).filter(member => {
+      const renewal = String(member.effective_renewal_date ?? member.renewal_date ?? "").slice(0, 10);
+      const diff = Math.round(
+        (new Date(`${renewal}T00:00:00Z`).getTime() - new Date(`${todayIso}T00:00:00Z`).getTime()) /
+          86400000
+      );
+      return (
+        bucket === "all" ||
+        (bucket === "expired" && diff < 0) ||
+        (bucket === "today" && diff === 0) ||
+        (bucket === "week" && diff >= 0 && diff <= 7) ||
+        (bucket === "month" && diff >= 0 && diff <= 30)
+      );
+    });
+
+    const needle = search.trim().toLowerCase();
+    const result = raw.filter(member => {
+      return (
+        !needle ||
+        [member.name, member.register_no, member.mobile_no, member.package_name].some(v =>
+          String(v ?? "").toLowerCase().includes(needle)
+        )
+      );
+    });
+
+    if (needle) {
+      result.sort((a, b) => {
+        const scoreA = getMemberSearchRelevance(a, needle);
+        const scoreB = getMemberSearchRelevance(b, needle);
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(b.register_no) - Number(a.register_no);
+      });
+    } else {
+      result.sort((a, b) =>
+        String(a.effective_renewal_date ?? a.renewal_date).localeCompare(
+          String(b.effective_renewal_date ?? b.renewal_date)
+        )
+      );
+    }
+
+    return result;
+  }, [members, bucket, search]);
+
+  const totalItems = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(pageNumber, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const paginatedRows = useMemo(
+    () => rows.slice(startIndex, endIndex),
+    [rows, startIndex, endIndex]
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">
+            Retention queue
+          </div>
+          <h1 className="page-title">Renewals</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            A focused follow-up list for members who are due or overdue.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <RefreshCw size={15} /> {rows.length} to follow up
+        </div>
       </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <RefreshCw size={15} /> {rows.length} to follow up
+      <DataAccessNotice error={error} status={!loading && !members?.length ? "empty_or_blocked" : undefined} />
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["all", "All renewals"],
+            ["expired", "Expired"],
+            ["today", "Due today"],
+            ["week", "Next 7 days"],
+            ["month", "Next 30 days"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              className={`btn ${bucket === key ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setBucket(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative min-w-[220px]">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            className="input input-with-icon"
+            placeholder="Search member, mobile, package"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="card overflow-hidden">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Mobile</th>
+                <th>Package</th>
+                <th>Renewal date</th>
+                <th>Amount</th>
+                <th>Pending</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableSkeleton columns={8} />
+              ) : paginatedRows.length ? (
+                paginatedRows.map(member => {
+                  const status = statusForMember(member);
+                  return (
+                    <tr key={member.register_no}>
+                      <td>
+                        <button className="flex items-center gap-3 text-left" onClick={() => onOpenMember(member)}>
+                          <Avatar name={member.name} small />
+                          <span>
+                            <span className="block font-semibold">{member.name}</span>
+                            <span className="text-[11px] text-muted-foreground">#{member.register_no}</span>
+                          </span>
+                        </button>
+                      </td>
+                      <td>{member.mobile_no || "—"}</td>
+                      <td>{member.package_name || "—"}</td>
+                      <td className="font-semibold">{date(member.effective_renewal_date ?? member.renewal_date)}</td>
+                      <td>{money(member.amount)}</td>
+                      <td
+                        className={
+                          Number(member.pending_amount) > 0 ? "font-bold text-[#b07818]" : "text-muted-foreground"
+                        }
+                      >
+                        {money(member.pending_amount)}
+                      </td>
+                      <td>
+                        <Badge tone={status.tone}>{status.label}</Badge>
+                      </td>
+                      <td>
+                        <div className="flex gap-2 items-center">
+                          {onOpenPaymentHistory && (
+                            <button
+                              className="h-9 w-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-[#13795b] hover:border-[#13795b] hover:bg-[#e7f4ed] transition-colors"
+                              title={`View complete payment history for ${member.name}`}
+                              onClick={() => onOpenPaymentHistory(member)}
+                              aria-label={`View payment history for ${member.name}`}
+                            >
+                              <Info size={16} />
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-ghost !py-1 !px-2 text-xs"
+                            onClick={() => onRenewMember(member)}
+                          >
+                            Renew
+                          </button>
+                          <WhatsAppButton member={member} onOpen={onOpenWhatsApp} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={8}>
+                    <EmptyState
+                      icon={RefreshCw}
+                      title="No renewals in this window"
+                      copy="Try a wider date range or clear search query."
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <PaginationControls
+          currentPage={safePage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          pageSize={pageSize}
+          pageSizeOptions={[15, 25, 50, 100]}
+          onPageChange={setPageNumber}
+          onPageSizeChange={size => {
+            setPageSize(size);
+            setPageNumber(1);
+          }}
+          itemName="renewals"
+        />
       </div>
     </div>
-    <DataAccessNotice error={error} status={!loading && !members?.length ? "empty_or_blocked" : undefined} />
-    <div className="flex flex-wrap gap-2 mb-4">
-      {[["all", "All renewals"], ["expired", "Expired"], ["today", "Due today"], ["week", "Next 7 days"], ["month", "Next 30 days"]].map(([key, label]) => (
-        <button key={key} className={`btn ${bucket === key ? "btn-primary" : "btn-ghost"}`} onClick={() => setBucket(key)}>
-          {label}
-        </button>
-      ))}
-    </div>
-    <div className="card overflow-hidden">
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr><th>Member</th><th>Mobile</th><th>Package</th><th>Renewal date</th><th>Amount</th><th>Pending</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            {loading ? <TableSkeleton columns={8} /> : rows.length ? rows.map(member => {
-              const status = statusForMember(member);
-              return <tr key={member.register_no}>
-                <td>
-                  <button className="flex items-center gap-3 text-left" onClick={() => onOpenMember(member)}>
-                    <Avatar name={member.name} small />
-                    <span>
-                      <span className="block font-semibold">{member.name}</span>
-                      <span className="text-[11px] text-muted-foreground">#{member.register_no}</span>
-                    </span>
-                  </button>
-                </td>
-                <td>{member.mobile_no || "—"}</td>
-                <td>{member.package_name || "—"}</td>
-                <td className="font-semibold">{date(member.effective_renewal_date ?? member.renewal_date)}</td>
-                <td>{money(member.amount)}</td>
-                <td className={Number(member.pending_amount) > 0 ? "font-bold text-[#b07818]" : "text-muted-foreground"}>{money(member.pending_amount)}</td>
-                <td><Badge tone={status.tone}>{status.label}</Badge></td>
-                <td>
-                  <div className="flex gap-2">
-                    <button className="btn btn-ghost !py-1 !px-2 text-xs" onClick={() => onRenewMember(member)}>Renew</button>
-                    <WhatsAppButton member={member} onOpen={onOpenWhatsApp} />
-                  </div>
-                </td>
-              </tr>;
-            }) : <tr><td colSpan={8}><EmptyState icon={RefreshCw} title="No renewals in this window" copy="Try a wider date range." /></td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>;
+  );
 }
 
 function PlansPage({ plans, loading, error }: { plans?: AnyRow[]; loading: boolean; error?: any }) {
@@ -1069,19 +1734,1072 @@ function PlansPage({ plans, loading, error }: { plans?: AnyRow[]; loading: boole
   return <div><div className="page-header"><div><div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">Official pricing</div><h1 className="page-title">Membership plans</h1><p className="text-sm text-muted-foreground mt-2">Pricing is read from Supabase. Historical member amounts are never overwritten.</p></div><div className="badge badge-green"><ShieldCheck size={13} /> Source of truth</div></div><DataAccessNotice error={error} status={!loading && !plans?.length ? "empty_or_blocked" : undefined} /><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">{loading ? [1, 2, 3].map(item => <div className="card p-5 h-52 animate-pulse bg-[#f0f3f2]" key={item} />) : grouped.length ? grouped.map((group: AnyRow[]) => <div className="card p-5" key={group[0]?.plan_name}><div className="flex items-start justify-between gap-3"><div className="h-10 w-10 rounded-xl bg-[#e7f4ed] text-[#1b7555] flex items-center justify-center"><Dumbbell size={18} /></div><span className="badge badge-slate">{group[0]?.plan_code || "Plan"}</span></div><h2 className="font-display font-bold text-xl mt-5">{group[0]?.plan_name}</h2><p className="text-xs text-muted-foreground min-h-9 mt-2">{group[0]?.description || "Flexible training membership for the studio."}</p><div className="space-y-2 mt-5">{group.sort((a, b) => Number(a.duration_months) - Number(b.duration_months)).map(plan => <div key={plan.id} className="flex items-center justify-between border-t border-[#edf1f2] pt-3"><div className="text-sm font-semibold">{plan.duration_months} month{Number(plan.duration_months) === 1 ? "" : "s"}</div><div className="text-right"><div className="font-display font-bold text-lg">{money(plan.price)}</div><div className="text-[10px] text-muted-foreground">+ {money(Number.isFinite(Number(plan.registration_fee)) ? Number(plan.registration_fee) : 0)} registration</div></div></div>)}</div></div>) : <div className="col-span-full"><EmptyState icon={Package} title="No membership plans visible" copy="Check Supabase read policies for membership_plans." /></div>}</div></div>;
 }
 
-function BalancePage({ rows, loading, error }: { rows?: AnyRow[]; loading: boolean; error?: any }) { const sorted = rows || []; return <div><div className="page-header"><div><div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">Monthly finance</div><h1 className="page-title">Balance sheet</h1><p className="text-sm text-muted-foreground mt-2">Monthly summaries from the existing balance_sheet table.</p></div><div className="badge badge-slate"><ClipboardList size={13} /> Historical view</div></div><DataAccessNotice error={error} status={!loading && !rows?.length ? "empty_or_blocked" : undefined} /><div className="card overflow-hidden"><div className="table-wrap"><table className="table"><thead><tr><th>Month</th><th>New join</th><th>Renewal</th><th>Gym expenses</th><th>Amount</th><th>Total</th></tr></thead><tbody>{loading ? <TableSkeleton columns={6} /> : sorted.length ? sorted.map(row => <tr key={row.month}><td className="font-semibold">{date(row.month)}</td><td>{row.new_join}</td><td>{row.renewal}</td><td className="text-[#b03842]">{money(row.gym_expenses)}</td><td className="text-[#257651] font-semibold">{money(row.amount)}</td><td className="font-display font-bold">{money(row.total)}</td></tr>) : <tr><td colSpan={6}><EmptyState icon={BarChart3} title="No balance-sheet rows visible" copy="Add an owner-authenticated SELECT policy to balance_sheet." /></td></tr>}</tbody></table></div></div></div>; }
+function BalancePage({
+  rows,
+  loading,
+  error,
+  onManageRoster,
+  onRecordExpenses,
+}: {
+  rows?: BalanceSheetRow[];
+  loading: boolean;
+  error?: any;
+  onManageRoster: (monthIso: string) => void;
+  onRecordExpenses: (monthIso?: string) => void;
+}) {
+  const sorted = rows || [];
+  return (
+    <div>
+      <div className="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[.12em] text-[#13795b] mb-3">
+            Monthly finance
+          </div>
+          <h1 className="page-title">Balance sheet</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            Live dynamic monthly summaries with operating expense management.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="btn btn-primary"
+            onClick={() => onRecordExpenses()}
+          >
+            <Plus size={16} /> Record Gym Expenses
+          </button>
+        </div>
+      </div>
+
+      <DataAccessNotice error={error} status={!loading && !rows?.length ? "empty_or_blocked" : undefined} />
+
+      <div className="card overflow-hidden">
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>New join</th>
+                <th>Renewal</th>
+                <th>Gym expenses</th>
+                <th>Collections (Amount)</th>
+                <th>Net Total</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <TableSkeleton columns={7} />
+              ) : sorted.length ? (
+                sorted.map(row => (
+                  <tr key={row.month} className="hover:bg-muted/40 transition-colors">
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{date(row.month)}</span>
+                        {row.is_live && (
+                          <span className="badge badge-green text-[10px] !py-0.5 !px-1.5 font-bold">
+                            Live
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        className="font-semibold text-foreground hover:text-[#13795b] hover:underline cursor-pointer"
+                        title="Click to view new joins for this month"
+                        onClick={() => onManageRoster(row.month)}
+                      >
+                        {row.new_join}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        className="font-semibold text-foreground hover:text-[#13795b] hover:underline cursor-pointer"
+                        title="Click to view renewals for this month"
+                        onClick={() => onManageRoster(row.month)}
+                      >
+                        {row.renewal}
+                      </button>
+                    </td>
+                    <td>
+                      {row.gym_expenses > 0 || row.expenses_entered ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#b03842] font-semibold">
+                            {money(row.gym_expenses)}
+                          </span>
+                          <button
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                            title="Edit expenses"
+                            onClick={() => onRecordExpenses(row.month)}
+                          >
+                            <Settings2 size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn btn-ghost !py-1 !px-2 text-xs text-[#b07818] font-semibold flex items-center gap-1 border border-amber-200 bg-amber-50 hover:bg-amber-100"
+                          onClick={() => onRecordExpenses(row.month)}
+                        >
+                          <Plus size={12} /> Add expense
+                        </button>
+                      )}
+                    </td>
+                    <td className="text-[#257651] font-semibold">
+                      {money(row.amount)}
+                    </td>
+                    <td className="font-display font-bold">
+                      {money(row.total)}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="btn btn-ghost !py-1 !px-2.5 text-xs flex items-center gap-1.5"
+                          onClick={() => onManageRoster(row.month)}
+                          title="View all members who joined or renewed this month"
+                        >
+                          <Users size={13} /> View roster
+                        </button>
+                        <button
+                          className="btn btn-ghost !py-1 !px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => onRecordExpenses(row.month)}
+                          title="Edit operating expenses for this month"
+                        >
+                          <Receipt size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      icon={BarChart3}
+                      title="No balance-sheet rows visible"
+                      copy="Add an owner-authenticated SELECT policy to balance_sheet."
+                    />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecordExpensesModal({
+  initialMonth,
+  balanceRows,
+  onClose,
+  onDone,
+}: {
+  initialMonth?: string;
+  balanceRows?: BalanceSheetRow[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const currentMonth = startOfMonth();
+  const [selectedMonth, setSelectedMonth] = useState(
+    initialMonth ? initialMonth.slice(0, 7) : currentMonth.slice(0, 7)
+  );
+
+  const matchedRow = useMemo(() => {
+    const fullIso = `${selectedMonth}-01`;
+    return (balanceRows || []).find(r => r.month === fullIso);
+  }, [balanceRows, selectedMonth]);
+
+  const [expenseAmount, setExpenseAmount] = useState<string>(
+    matchedRow && matchedRow.gym_expenses > 0 ? String(matchedRow.gym_expenses) : ""
+  );
+
+  useEffect(() => {
+    if (matchedRow && matchedRow.gym_expenses > 0) {
+      setExpenseAmount(String(matchedRow.gym_expenses));
+    }
+  }, [matchedRow]);
+
+  const grossCollections = matchedRow ? Number(matchedRow.amount || 0) : 0;
+  const parsedExpenses = Number(expenseAmount) || 0;
+  const netTotal = grossCollections - parsedExpenses;
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      upsertMonthlyExpenses({
+        month: `${selectedMonth}-01`,
+        gym_expenses: parsedExpenses,
+      }),
+    onSuccess: () => {
+      toast.success(`Expenses updated for ${date(`${selectedMonth}-01`)}.`);
+      onDone();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  return (
+    <div
+      className="drawer-backdrop"
+      onMouseDown={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="drawer !max-w-md" role="dialog" aria-modal="true">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[.12em] text-[#13795b] font-bold">
+              Studio Operating Expenses
+            </div>
+            <h2 className="font-display font-bold text-2xl mt-1">
+              Record Gym Expenses
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter monthly operating expenses (rent, power, maintenance, trainer payouts) to compute net studio profit.
+            </p>
+          </div>
+          <button
+            className="h-9 w-9 flex items-center justify-center rounded-lg border border-border"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <label className="block text-xs font-bold">
+            Select Month *
+            <input
+              className="input mt-1"
+              type="month"
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+            />
+          </label>
+
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-4 text-xs space-y-2">
+            <div className="font-bold text-sm text-foreground mb-2">
+              Live Month Summary ({date(`${selectedMonth}-01`)})
+            </div>
+            <div className="flex justify-between py-1 border-b border-border/50">
+              <span className="text-muted-foreground">New admissions:</span>
+              <span className="font-bold">{matchedRow ? matchedRow.new_join : 0} members</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-border/50">
+              <span className="text-muted-foreground">Renewals:</span>
+              <span className="font-bold">{matchedRow ? matchedRow.renewal : 0} members</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-border/50">
+              <span className="text-muted-foreground">Total Collections (Gross):</span>
+              <span className="font-bold text-[#257651]">{money(grossCollections)}</span>
+            </div>
+          </div>
+
+          <label className="block text-xs font-bold">
+            Gym Operating Expenses (₹) *
+            <input
+              className="input mt-1 font-semibold text-[#b03842]"
+              type="number"
+              min="0"
+              placeholder="e.g. 25000"
+              value={expenseAmount}
+              onChange={e => setExpenseAmount(e.target.value)}
+            />
+          </label>
+
+          <div className="rounded-xl border border-[#c9f0dc] bg-[#e7f4ed] p-3 text-xs flex items-center justify-between">
+            <div>
+              <div className="text-[10px] uppercase font-bold text-[#145b43]">
+                Calculated Net Profit
+              </div>
+              <div className="text-lg font-display font-bold text-[#145b43] mt-0.5">
+                {money(netTotal)}
+              </div>
+            </div>
+            <div className="text-right text-[11px] text-[#145b43]/80">
+              Gross ({money(grossCollections)}) - Expenses ({money(parsedExpenses)})
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={mutation.isPending || expenseAmount === ""}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Saving…" : "Save Monthly Balance"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MonthlyRosterModal({
+  monthIso,
+  onClose,
+  onOpenMember,
+  onRecordExpenses,
+}: {
+  monthIso: string;
+  onClose: () => void;
+  onOpenMember: (member: AnyRow) => void;
+  onRecordExpenses: (monthIso: string) => void;
+}) {
+  const [tab, setTab] = useState<"newJoins" | "renewals">("newJoins");
+  const [search, setSearch] = useState("");
+
+  const rosterQuery = useQuery({
+    queryKey: ["monthlyRoster", monthIso],
+    queryFn: () => getMonthlyRoster(monthIso),
+  });
+
+  const data = rosterQuery.data;
+  const loading = rosterQuery.isLoading;
+
+  const filteredNewJoins = useMemo(() => {
+    const needle = search.toLowerCase();
+    return (data?.newJoins || []).filter(m =>
+      !needle || [m.name, m.register_no, m.mobile_no, m.package_name].some(v =>
+        String(v ?? "").toLowerCase().includes(needle)
+      )
+    );
+  }, [data?.newJoins, search]);
+
+  const filteredRenewals = useMemo(() => {
+    const needle = search.toLowerCase();
+    return (data?.renewals || []).filter(m =>
+      !needle || [m.name, m.register_no, m.package_name].some(v =>
+        String(v ?? "").toLowerCase().includes(needle)
+      )
+    );
+  }, [data?.renewals, search]);
+
+  return (
+    <div
+      className="drawer-backdrop"
+      onMouseDown={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="drawer !max-w-3xl" role="dialog" aria-modal="true">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[.12em] text-[#13795b] font-bold">
+              Member Activity Breakdown
+            </div>
+            <h2 className="font-display font-bold text-2xl mt-1">
+              {date(monthIso)} Activity Roster
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Manage all individuals who joined or renewed during this billing month.
+            </p>
+          </div>
+          <button
+            className="h-9 w-9 flex items-center justify-center rounded-lg border border-border"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        {/* Metrics summary */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">New Joins</span>
+            <span className="text-lg font-bold text-foreground mt-1 block">
+              {loading ? "…" : data?.newJoins.length || 0}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">Renewals</span>
+            <span className="text-lg font-bold text-foreground mt-1 block">
+              {loading ? "…" : data?.renewals.length || 0}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">Collected</span>
+            <span className="text-lg font-bold text-[#257651] mt-1 block">
+              {loading ? "…" : money(data?.totalCollected)}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">Pending</span>
+            <span className="text-lg font-bold text-[#b07818] mt-1 block">
+              {loading ? "…" : money(data?.totalPending)}
+            </span>
+          </div>
+        </div>
+
+        {/* Tabs & Search */}
+        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
+          <div className="flex items-center gap-1 bg-[#f0f3f2] p-1 rounded-xl">
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                tab === "newJoins" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setTab("newJoins")}
+            >
+              New Joins ({data?.newJoins.length || 0})
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                tab === "renewals" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setTab("renewals")}
+            >
+              Renewals ({data?.renewals.length || 0})
+            </button>
+          </div>
+
+          <div className="relative min-w-56">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              className="input input-with-icon text-xs py-1.5"
+              placeholder="Search name, register no…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Member Table */}
+        <div className="card overflow-hidden mt-4">
+          <div className="table-wrap max-h-96 overflow-y-auto">
+            {tab === "newJoins" ? (
+              <table className="table text-xs">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Mobile</th>
+                    <th>Package</th>
+                    <th>Joining</th>
+                    <th>Paid</th>
+                    <th>Pending</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <TableSkeleton columns={7} />
+                  ) : filteredNewJoins.length ? (
+                    filteredNewJoins.map(m => (
+                      <tr key={m.register_no} className="hover:bg-muted/30">
+                        <td>
+                          <button
+                            className="flex items-center gap-2 text-left hover:text-[#13795b]"
+                            onClick={() => onOpenMember(m)}
+                          >
+                            <Avatar name={m.name} small />
+                            <div>
+                              <span className="block font-semibold">{m.name}</span>
+                              <span className="text-[10px] text-muted-foreground">#{m.register_no}</span>
+                            </div>
+                          </button>
+                        </td>
+                        <td>{m.mobile_no || "—"}</td>
+                        <td>{m.package_name || "—"}</td>
+                        <td>{date(m.date_of_joining)}</td>
+                        <td className="font-semibold text-[#257651]">{money(m.paid_amount)}</td>
+                        <td className={Number(m.pending_amount) > 0 ? "font-bold text-[#b07818]" : "text-muted-foreground"}>
+                          {money(m.pending_amount)}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost !py-1 !px-2.5 text-xs text-[#13795b] hover:bg-[#e7f4ed]"
+                            onClick={() => onOpenMember(m)}
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7}>
+                        <EmptyState
+                          icon={Users}
+                          title="No new joins found"
+                          copy={search ? "No members match your search." : "No new admissions recorded in this month."}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="table text-xs">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Package</th>
+                    <th>Renewal Date</th>
+                    <th>Paid</th>
+                    <th>Pending</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <TableSkeleton columns={7} />
+                  ) : filteredRenewals.length ? (
+                    filteredRenewals.map(m => (
+                      <tr key={m.id || m.register_no} className="hover:bg-muted/30">
+                        <td>
+                          <button
+                            className="flex items-center gap-2 text-left hover:text-[#13795b]"
+                            onClick={() => onOpenMember(m)}
+                          >
+                            <Avatar name={m.name} small />
+                            <div>
+                              <span className="block font-semibold">{m.name}</span>
+                              <span className="text-[10px] text-muted-foreground">#{m.register_no}</span>
+                            </div>
+                          </button>
+                        </td>
+                        <td>{m.package_name || "—"}</td>
+                        <td>{date(m.renewal_date)}</td>
+                        <td className="font-semibold text-[#257651]">{money(m.paid_amount)}</td>
+                        <td className={Number(m.pending_amount) > 0 ? "font-bold text-[#b07818]" : "text-muted-foreground"}>
+                          {money(m.pending_amount)}
+                        </td>
+                        <td>
+                          <Badge tone={Number(m.pending_amount) > 0 ? "amber" : "green"}>
+                            {m.payment_status || (Number(m.pending_amount) > 0 ? "Pending" : "Paid")}
+                          </Badge>
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost !py-1 !px-2.5 text-xs text-[#13795b] hover:bg-[#e7f4ed]"
+                            onClick={() => onOpenMember(m)}
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7}>
+                        <EmptyState
+                          icon={Users}
+                          title="No renewals found"
+                          copy={search ? "No renewals match your search." : "No renewals recorded in this month."}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center justify-between">
+          <button
+            className="btn btn-ghost text-xs flex items-center gap-1.5"
+            onClick={() => onRecordExpenses(monthIso)}
+          >
+            <Receipt size={14} /> Update Gym Expenses for {date(monthIso)}
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemberPaymentHistoryModal({
+  member,
+  onClose,
+  onRenewMember,
+  onSettlePending,
+  onOpenWhatsApp,
+  onManageMember,
+}: {
+  member: AnyRow;
+  onClose: () => void;
+  onRenewMember?: (member: AnyRow) => void;
+  onSettlePending?: (member: AnyRow) => void;
+  onOpenWhatsApp?: (member: AnyRow) => void;
+  onManageMember?: (member: AnyRow) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "paid" | "pending">("all");
+
+  const registerNo = Number(member.register_no);
+  const historyQuery = useQuery({
+    queryKey: ["memberPayments", registerNo],
+    queryFn: () => getPaymentHistory(registerNo),
+  });
+
+  const payments = historyQuery.data || [];
+  const loading = historyQuery.isLoading;
+
+  const totalPaid = useMemo(
+    () => payments.reduce((acc, p) => acc + Number(p.paid_amount || 0), 0),
+    [payments]
+  );
+  const totalDue = useMemo(
+    () => payments.reduce((acc, p) => acc + Number(p.amount_due || 0), 0),
+    [payments]
+  );
+  const totalPendingInRecords = useMemo(
+    () => payments.reduce((acc, p) => acc + Number(p.pending_amount || 0), 0),
+    [payments]
+  );
+
+  const filtered = useMemo(() => {
+    const needle = search.toLowerCase();
+    return payments.filter(p => {
+      const isPending =
+        Number(p.pending_amount || 0) > 0 ||
+        ["due_or_unpaid", "partial"].includes(String(p.payment_status));
+      const matchesFilter =
+        filter === "all" ||
+        (filter === "paid" && !isPending) ||
+        (filter === "pending" && isPending);
+      const matchesSearch =
+        !needle ||
+        [p.billing_month, p.package_name, p.payment_status, p.amount_due, p.paid_amount]
+          .some(v => String(v ?? "").toLowerCase().includes(needle));
+      return matchesFilter && matchesSearch;
+    });
+  }, [payments, search, filter]);
+
+  const badge = statusForMember(member);
+
+  return (
+    <div
+      className="drawer-backdrop !z-[65]"
+      onMouseDown={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="drawer !max-w-3xl" role="dialog" aria-modal="true">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Avatar name={member.name} />
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-display font-bold text-2xl">{member.name}</h2>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                <span className="font-mono font-semibold">#{member.register_no}</span>
+                <span>•</span>
+                <span>{member.mobile_no || "No mobile"}</span>
+                <span>•</span>
+                <span>{member.package_name || "Plan"}</span>
+                <span>•</span>
+                <span>Joined: {date(member.date_of_joining)}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        {/* Financial Summary Badges */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">
+              Total Records
+            </span>
+            <span className="text-lg font-bold text-foreground mt-1 block">
+              {loading ? "…" : `${payments.length} cycles`}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">
+              Total Lifetime Paid
+            </span>
+            <span className="text-lg font-bold text-[#257651] mt-1 block">
+              {loading ? "…" : money(totalPaid)}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">
+              Total Billed Due
+            </span>
+            <span className="text-lg font-bold text-foreground mt-1 block">
+              {loading ? "…" : money(totalDue)}
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs">
+            <span className="text-muted-foreground block text-[10px] uppercase font-bold">
+              Pending Balance
+            </span>
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <span
+                className={`text-lg font-bold ${
+                  Number(member.pending_amount || 0) > 0 || totalPendingInRecords > 0
+                    ? "text-[#b07818]"
+                    : "text-[#257651]"
+                }`}
+              >
+                {loading ? "…" : money(member.pending_amount ?? totalPendingInRecords)}
+              </span>
+              {onSettlePending && (Number(member.pending_amount || 0) > 0 || totalPendingInRecords > 0) && (
+                <button
+                  className="text-[11px] font-bold text-[#b07818] hover:underline"
+                  onClick={() => onSettlePending(member)}
+                >
+                  Settle
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter & Search Bar */}
+        <div className="flex items-center justify-between gap-3 mt-5 flex-wrap">
+          <div className="flex items-center gap-1 bg-[#f0f3f2] p-1 rounded-xl">
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                filter === "all"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setFilter("all")}
+            >
+              All Records ({payments.length})
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                filter === "paid"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setFilter("paid")}
+            >
+              Paid
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                filter === "pending"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setFilter("pending")}
+            >
+              Pending / Due
+            </button>
+          </div>
+
+          <div className="relative min-w-56">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              className="input input-with-icon text-xs py-1.5"
+              placeholder="Search billing month, plan…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Payment History Table */}
+        <div className="card overflow-hidden mt-4">
+          <div className="table-wrap max-h-96 overflow-y-auto">
+            <table className="table text-xs">
+              <thead>
+                <tr>
+                  <th>Billing Month</th>
+                  <th>Package / Tag</th>
+                  <th>Amount Due</th>
+                  <th>Paid Amount</th>
+                  <th>Pending Balance</th>
+                  <th>Payment Status</th>
+                  <th>Next Renewal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <TableSkeleton columns={7} />
+                ) : filtered.length ? (
+                  filtered.map(p => {
+                    const isPending =
+                      Number(p.pending_amount || 0) > 0 ||
+                      ["due_or_unpaid", "partial"].includes(String(p.payment_status));
+                    return (
+                      <tr key={p.id} className="hover:bg-muted/30">
+                        <td className="font-semibold text-foreground">
+                          {date(p.billing_month)}
+                        </td>
+                        <td>
+                          <div>{p.package_name || member.package_name || "—"}</div>
+                          {p.source_sheet && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {p.source_sheet}
+                            </span>
+                          )}
+                        </td>
+                        <td className="font-semibold">{money(p.amount_due)}</td>
+                        <td className="font-semibold text-[#257651]">
+                          {money(p.paid_amount)}
+                        </td>
+                        <td
+                          className={
+                            isPending ? "font-bold text-[#b07818]" : "text-muted-foreground"
+                          }
+                        >
+                          {money(p.pending_amount)}
+                        </td>
+                        <td>
+                          <Badge tone={isPending ? "amber" : "green"}>
+                            {p.payment_status || (isPending ? "Pending" : "Paid")}
+                          </Badge>
+                        </td>
+                        <td className="text-muted-foreground">
+                          {p.renewal_date ? date(p.renewal_date) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7}>
+                      <EmptyState
+                        icon={WalletCards}
+                        title="No payment history records found"
+                        copy={
+                          search
+                            ? "No payment records match your search filter."
+                            : "No payment history found for this member."
+                        }
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            {onManageMember && (
+              <button
+                className="btn btn-ghost text-xs flex items-center gap-1.5"
+                onClick={() => onManageMember(member)}
+              >
+                <UserRound size={14} /> Full Member Profile
+              </button>
+            )}
+            {onOpenWhatsApp && (
+              <WhatsAppButton member={member} onOpen={onOpenWhatsApp} />
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {onRenewMember && (
+              <button
+                className="btn btn-primary text-xs flex items-center gap-1.5"
+                onClick={() => onRenewMember(member)}
+              >
+                <RefreshCw size={14} /> Renew Membership
+              </button>
+            )}
+            <button className="btn btn-ghost" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettlePendingModal({
+  member,
+  onClose,
+  onDone,
+}: {
+  member: AnyRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const currentPending = Number(member.pending_amount || 0);
+  const [collectAmount, setCollectAmount] = useState(
+    String(currentPending > 0 ? currentPending : "")
+  );
+
+  const parsedAmount = Number(collectAmount) || 0;
+  const remainingAfter = Math.max(0, currentPending - parsedAmount);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      settlePendingBalance({
+        register_no: Number(member.register_no),
+        collect_amount: parsedAmount,
+      }),
+    onSuccess: () => {
+      if (remainingAfter === 0) {
+        toast.success(
+          `Collected ${money(parsedAmount)}. Outstanding balance is fully settled! 🎉`
+        );
+      } else {
+        toast.success(
+          `Collected ${money(parsedAmount)}. Remaining pending balance: ${money(remainingAfter)}`
+        );
+      }
+      onDone();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  return (
+    <div
+      className="drawer-backdrop !z-[70]"
+      onMouseDown={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="drawer !max-w-md" role="dialog" aria-modal="true">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar name={member.name} />
+            <div>
+              <div className="text-xs uppercase tracking-[.12em] text-[#b07818] font-bold">
+                Pending Balance Settlement
+              </div>
+              <h2 className="font-display font-bold text-2xl mt-0.5">{member.name}</h2>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Register #{member.register_no} • {member.mobile_no || "No mobile"}
+              </div>
+            </div>
+          </div>
+          <button
+            className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        {/* Current Pending Banner */}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mt-5 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase font-bold text-[#b07818]">
+              Current Outstanding Balance
+            </div>
+            <div className="text-2xl font-display font-bold text-[#b07818] mt-0.5">
+              {money(currentPending)}
+            </div>
+          </div>
+          <div className="text-right text-xs text-muted-foreground">
+            Package: <span className="font-semibold text-foreground">{member.package_name || "Plan"}</span>
+          </div>
+        </div>
+
+        {/* Form Inputs */}
+        <div className="mt-5 space-y-4">
+          <label className="block text-xs font-bold">
+            Amount Collecting Now (₹) *
+            <input
+              className="input mt-1 text-lg font-bold text-[#145b43]"
+              type="number"
+              min="1"
+              max={currentPending > 0 ? currentPending : undefined}
+              placeholder="e.g. 500"
+              value={collectAmount}
+              onChange={e => setCollectAmount(e.target.value)}
+            />
+          </label>
+
+          {/* Quick Pay Shortcut Pills */}
+          {currentPending > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-muted-foreground font-semibold">Quick pick:</span>
+              <button
+                type="button"
+                className="btn btn-ghost !py-1 !px-2.5 text-xs border border-border hover:bg-[#e7f4ed]"
+                onClick={() => setCollectAmount(String(currentPending))}
+              >
+                Full Balance ({money(currentPending)})
+              </button>
+              {currentPending > 200 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost !py-1 !px-2.5 text-xs border border-border hover:bg-[#e7f4ed]"
+                  onClick={() => setCollectAmount(String(Math.floor(currentPending / 2)))}
+                >
+                  Half ({money(Math.floor(currentPending / 2))})
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Live Outcome Card */}
+          <div className="rounded-xl border border-border bg-[#f7faf8] p-3 text-xs space-y-2">
+            <div className="font-bold text-foreground text-xs">Summary after this payment:</div>
+            <div className="flex justify-between py-1 border-b border-border/50">
+              <span className="text-muted-foreground">Amount collected:</span>
+              <span className="font-bold text-[#257651]">{money(parsedAmount)}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-muted-foreground">Remaining pending balance:</span>
+              <span
+                className={`font-bold ${
+                  remainingAfter === 0 ? "text-[#257651]" : "text-[#b07818]"
+                }`}
+              >
+                {remainingAfter === 0 ? "₹0 (Fully Cleared! 🎉)" : money(remainingAfter)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="mt-6 flex justify-end gap-3">
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={mutation.isPending || parsedAmount <= 0}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending
+              ? "Recording…"
+              : remainingAfter === 0
+              ? "Settle Full Balance"
+              : "Collect Partial Balance"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MemberDrawer({
   member,
   onClose,
   onRefresh,
   onRenewMember,
+  onSettlePending,
   onOpenWhatsApp,
 }: {
   member: AnyRow;
   onClose: () => void;
   onRefresh: () => void;
   onRenewMember: (member: AnyRow) => void;
+  onSettlePending: (member: AnyRow) => void;
   onOpenWhatsApp: (member: AnyRow) => void;
 }) {
   const queryClient = useQueryClient();
@@ -1092,7 +2810,7 @@ function MemberDrawer({
   const status = statusForMember(member);
   const reason = (member.status_detail as any)?.reason as string | undefined;
 
-  return <div className="drawer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><aside className="drawer"><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-3"><Avatar name={member.name} /><div><div className="font-display font-bold text-xl">{member.name}</div><div className="text-xs text-muted-foreground mt-1">Register #{member.register_no} · {member.mobile_no || "No mobile"}</div></div></div><button className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close member detail"><X size={17} /></button></div><div className="flex items-center gap-2 mt-5 flex-wrap"><Badge tone={status.tone}>{status.label}</Badge><button className="btn btn-primary" onClick={() => onRenewMember(member)}><RefreshCw size={14} /> Renew / Update Membership</button><button className="btn btn-ghost" onClick={() => setPayingOpen(v => !v)}><WalletCards size={14} /> Record payment</button><WhatsAppButton member={member} onOpen={onOpenWhatsApp} /><button className="btn btn-ghost" onClick={() => setEditing(!editing)}><Settings2 size={14} /> {editing ? "Cancel edit" : "Edit"}</button><button className="btn btn-ghost text-[#b03842] hover:bg-[#fbe9ea]" onClick={() => setDeleteOpen(true)}><Trash2 size={14} /> Delete member</button></div>{reason && <p className="text-[11px] text-muted-foreground mt-2">Current status is calculated automatically — {reason}</p>}{payingOpen && <RecordPaymentForm member={member} onDone={() => { setPayingOpen(false); detail.refetch(); onRefresh(); queryClient.invalidateQueries({ queryKey: ["membersWithStatus"] }); }} />}{editing ? <EditMemberForm member={member} onDone={() => { setEditing(false); detail.refetch(); onRefresh(); }} /> : <><div className="grid grid-cols-2 gap-3 mt-7"><DetailItem label="Package" value={member.package_name} /><DetailItem label="Package code" value={member.package_code} /><DetailItem label="Amount" value={money(member.amount)} /><DetailItem label="Renewal date" value={date(member.effective_renewal_date ?? member.renewal_date)} /><DetailItem label="Pending" value={money(member.pending_amount)} tone={Number(member.pending_amount) > 0 ? "amber" : "default"} /><DetailItem label="Personal training" value={member.personal_training || "—"} /></div><div className="mt-7"><h3 className="section-title">Personal information</h3><div className="mt-3 space-y-3 rounded-xl bg-[#f7faf8] p-4"><DetailLine label="Date of birth" value={date(member.date_of_birth)} /><DetailLine label="Date of joining" value={date(member.date_of_joining)} /><DetailLine label="Mobile" value={member.mobile_no || "—"} /><DetailLine label="Address" value={member.address || "—"} /></div></div><div className="mt-7"><div className="flex items-center justify-between"><div><h3 className="section-title">Payment history</h3><p className="text-xs text-muted-foreground mt-1">Every record is a separate billing history row.</p></div><span className="badge badge-slate">{detail.data?.payments?.length || 0} rows</span></div><div className="mt-3 space-y-2">{detail.isLoading ? <div className="text-xs text-muted-foreground">Loading payment history…</div> : detail.data?.payments?.length ? detail.data.payments.slice(0, 12).map((payment: AnyRow) => <div key={payment.id} className="rounded-xl border border-border p-3"><div className="flex items-center justify-between"><div className="text-sm font-semibold">{date(payment.billing_month)}</div><Badge tone={Number(payment.pending_amount) > 0 ? "amber" : "green"}>{Number(payment.pending_amount) > 0 ? "Pending" : "Paid"}</Badge></div><div className="grid grid-cols-3 gap-2 text-xs mt-3"><div><div className="text-muted-foreground">Due</div><div className="font-semibold mt-1">{money(payment.amount_due)}</div></div><div><div className="text-muted-foreground">Paid</div><div className="font-semibold text-[#257651] mt-1">{money(payment.paid_amount)}</div></div><div><div className="text-muted-foreground">Pending</div><div className="font-semibold text-[#b07818] mt-1">{money(payment.pending_amount)}</div></div></div></div>) : <EmptyState icon={WalletCards} title="No payment history visible" copy="This may be an RLS access issue or a new member." />}</div></div></>}</aside>{deleteOpen && <DeleteMemberDialog member={member} paymentCount={detail.data?.payments?.length || 0} onClose={() => setDeleteOpen(false)} onDeleted={() => { setDeleteOpen(false); onClose(); onRefresh(); queryClient.invalidateQueries({ queryKey: ["membersWithStatus"] }); }} />}</div>;
+  return <div className="drawer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><aside className="drawer"><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-3"><Avatar name={member.name} /><div><div className="font-display font-bold text-xl">{member.name}</div><div className="text-xs text-muted-foreground mt-1">Register #{member.register_no} · {member.mobile_no || "No mobile"}</div></div></div><button className="h-9 w-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close member detail"><X size={17} /></button></div><div className="flex items-center gap-2 mt-5 flex-wrap"><Badge tone={status.tone}>{status.label}</Badge><button className="btn btn-primary" onClick={() => onRenewMember(member)}><RefreshCw size={14} /> Renew / Update Membership</button>{Number(member.pending_amount) > 0 && <button className="btn btn-ghost text-[#b07818] border border-amber-200 bg-amber-50 hover:bg-amber-100 font-semibold" onClick={() => onSettlePending(member)}><CircleDollarSign size={14} /> Settle pending</button>}<button className="btn btn-ghost" onClick={() => setPayingOpen(v => !v)}><WalletCards size={14} /> Record payment</button><WhatsAppButton member={member} onOpen={onOpenWhatsApp} /><button className="btn btn-ghost" onClick={() => setEditing(!editing)}><Settings2 size={14} /> {editing ? "Cancel edit" : "Edit"}</button><button className="btn btn-ghost text-[#b03842] hover:bg-[#fbe9ea]" onClick={() => setDeleteOpen(true)}><Trash2 size={14} /> Delete member</button></div>{Number(member.pending_amount) > 0 && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between gap-3"><div><div className="text-[10px] uppercase font-bold text-[#b07818]">Outstanding Pending Balance</div><div className="text-xl font-display font-bold text-[#b07818] mt-0.5">{money(member.pending_amount)} remaining</div></div><button className="btn btn-primary !bg-[#b07818] hover:!bg-[#946210] !text-white text-xs flex items-center gap-1.5" onClick={() => onSettlePending(member)}><CircleDollarSign size={14} /> Collect & Settle</button></div>}{reason && <p className="text-[11px] text-muted-foreground mt-2">Current status is calculated automatically — {reason}</p>}{payingOpen && <RecordPaymentForm member={member} onDone={() => { setPayingOpen(false); detail.refetch(); onRefresh(); queryClient.invalidateQueries({ queryKey: ["membersWithStatus"] }); }} />}{editing ? <EditMemberForm member={member} onDone={() => { setEditing(false); detail.refetch(); onRefresh(); }} /> : <><div className="grid grid-cols-2 gap-3 mt-7"><DetailItem label="Package" value={member.package_name} /><DetailItem label="Package code" value={member.package_code} /><DetailItem label="Amount" value={money(member.amount)} /><DetailItem label="Renewal date" value={date(member.effective_renewal_date ?? member.renewal_date)} /><DetailItem label="Pending" value={money(member.pending_amount)} tone={Number(member.pending_amount) > 0 ? "amber" : "default"} /><DetailItem label="Personal training" value={member.personal_training || "—"} /></div><div className="mt-7"><h3 className="section-title">Personal information</h3><div className="mt-3 space-y-3 rounded-xl bg-[#f7faf8] p-4"><DetailLine label="Date of birth" value={date(member.date_of_birth)} /><DetailLine label="Date of joining" value={date(member.date_of_joining)} /><DetailLine label="Mobile" value={member.mobile_no || "—"} /><DetailLine label="Address" value={member.address || "—"} /></div></div><div className="mt-7"><div className="flex items-center justify-between"><div><h3 className="section-title">Payment history</h3><p className="text-xs text-muted-foreground mt-1">Every record is a separate billing history row.</p></div><span className="badge badge-slate">{detail.data?.payments?.length || 0} rows</span></div><div className="mt-3 space-y-2">{detail.isLoading ? <div className="text-xs text-muted-foreground">Loading payment history…</div> : detail.data?.payments?.length ? detail.data.payments.slice(0, 12).map((payment: AnyRow) => <div key={payment.id} className="rounded-xl border border-border p-3"><div className="flex items-center justify-between"><div className="text-sm font-semibold">{date(payment.billing_month)}</div><Badge tone={Number(payment.pending_amount) > 0 ? "amber" : "green"}>{Number(payment.pending_amount) > 0 ? "Pending" : "Paid"}</Badge></div><div className="grid grid-cols-3 gap-2 text-xs mt-3"><div><div className="text-muted-foreground">Due</div><div className="font-semibold mt-1">{money(payment.amount_due)}</div></div><div><div className="text-muted-foreground">Paid</div><div className="font-semibold text-[#257651] mt-1">{money(payment.paid_amount)}</div></div><div><div className="text-muted-foreground">Pending</div><div className="font-semibold text-[#b07818] mt-1">{money(payment.pending_amount)}</div></div></div></div>) : <EmptyState icon={WalletCards} title="No payment history visible" copy="This may be an RLS access issue or a new member." />}</div></div></>}</aside>{deleteOpen && <DeleteMemberDialog member={member} paymentCount={detail.data?.payments?.length || 0} onClose={() => setDeleteOpen(false)} onDeleted={() => { setDeleteOpen(false); onClose(); onRefresh(); queryClient.invalidateQueries({ queryKey: ["membersWithStatus"] }); }} />}</div>;
 }
 
 /**
@@ -1220,11 +2938,52 @@ function AddMemberModal({ onClose, onDone, plans }: { onClose: () => void; onDon
     [planOptions, packageName, duration]
   );
 
+  const [hasPartialPayment, setHasPartialPayment] = useState(false);
+  const [paidInput, setPaidInput] = useState("");
+  const [pendingInput, setPendingInput] = useState("");
+
   const planAmount = selectedPlan?.price ?? 0;
   const registrationFee = selectedPlan?.registration_fee ?? 0;
   const firstPayment = planAmount + registrationFee;
   const renewalDate = duration ? addMonthsSafe(joining, Number(duration)) : "";
-  const pendingAmount = 0;
+
+  const handlePaidChange = (val: string) => {
+    const clean = val.replace(/[^\d]/g, "");
+    setPaidInput(clean);
+    if (clean === "") {
+      setPendingInput("");
+    } else {
+      const num = Number(clean);
+      const pend = Math.max(0, firstPayment - num);
+      setPendingInput(String(pend));
+    }
+  };
+
+  const handlePendingChange = (val: string) => {
+    const clean = val.replace(/[^\d]/g, "");
+    setPendingInput(clean);
+    if (clean === "") {
+      setPaidInput("");
+    } else {
+      const num = Number(clean);
+      const pd = Math.max(0, firstPayment - num);
+      setPaidInput(String(pd));
+    }
+  };
+
+  const effectivePaid = useMemo(() => {
+    if (!hasPartialPayment) return firstPayment;
+    if (paidInput !== "") return Math.min(firstPayment, Number(paidInput) || 0);
+    if (pendingInput !== "") return Math.max(0, firstPayment - (Number(pendingInput) || 0));
+    return firstPayment;
+  }, [hasPartialPayment, firstPayment, paidInput, pendingInput]);
+
+  const effectivePending = useMemo(() => {
+    if (!hasPartialPayment) return 0;
+    if (pendingInput !== "") return Math.min(firstPayment, Number(pendingInput) || 0);
+    if (paidInput !== "") return Math.max(0, firstPayment - (Number(paidInput) || 0));
+    return 0;
+  }, [hasPartialPayment, firstPayment, pendingInput, paidInput]);
 
   const regValid = /^[0-9]+$/.test(registerNo) && Number(registerNo) > 0;
   const nameValid = name.trim().length > 0 && !/^\d+$/.test(name.trim());
@@ -1251,9 +3010,9 @@ function AddMemberModal({ onClose, onDone, plans }: { onClose: () => void; onDon
       plan_amount: planAmount,
       billing_month: `${joining.slice(0, 7)}-01`,
       amount_due: firstPayment,
-      paid_amount: firstPayment,
-      pending_amount: pendingAmount,
-      payment_status: "paid",
+      paid_amount: effectivePaid,
+      pending_amount: effectivePending,
+      payment_status: effectivePending > 0 ? "due_or_unpaid" : "paid",
       personal_training: packageName === "Personal Training" ? "Y" : null,
     }),
     onSuccess: (createdNo) => { toast.success(`Member #${createdNo} created with initial payment.`); onDone(); },
@@ -1282,10 +3041,67 @@ function AddMemberModal({ onClose, onDone, plans }: { onClose: () => void; onDon
       <label className="block text-xs font-bold">Membership duration *<select className="select mt-1" data-testid="duration" value={duration} onChange={e => setDuration(e.target.value ? Number(e.target.value) : "")} disabled={!packageName}><option value="">Select duration</option>{durations.map(d => <option key={d} value={d}>{DURATION_LABEL[d] || `${d} Months`}</option>)}</select>{err(!durationValid, "Please select membership duration.")}</label>
       <label className="block text-xs font-bold">Plan amount<input className={ro} data-testid="plan-amount" readOnly value={selectedPlan ? money(planAmount) : "—"} /></label>
       <label className="block text-xs font-bold">Registration fee<input className={ro} data-testid="registration-fee" readOnly value={selectedPlan ? money(registrationFee) : "—"} /></label>
-      <label className="block text-xs font-bold">First payment<input className={ro} data-testid="first-payment" readOnly value={selectedPlan ? money(firstPayment) : "—"} /></label>
+      <label className="block text-xs font-bold col-span-2">First payment total<input className={ro} data-testid="first-payment" readOnly value={selectedPlan ? money(firstPayment) : "—"} /></label>
+
+      <div className="col-span-2 rounded-xl border border-border bg-[#f7faf8] p-3 my-1">
+        <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hasPartialPayment}
+            onChange={e => {
+              const checked = e.target.checked;
+              setHasPartialPayment(checked);
+              if (!checked) {
+                setPaidInput("");
+                setPendingInput("");
+              }
+            }}
+          />
+          <span>Allow partial payment (unlock pending balance)</span>
+        </label>
+        {hasPartialPayment && (
+          <p className="text-[11px] text-muted-foreground mt-1 ml-5">
+            Member is paying partially now. Enter either the amount paid now or the pending balance.
+          </p>
+        )}
+      </div>
+
+      <label className="block text-xs font-bold">
+        Amount paid now (₹)
+        {hasPartialPayment ? (
+          <input
+            className="input mt-1 bg-white font-semibold"
+            data-testid="paid-amount"
+            type="text"
+            inputMode="numeric"
+            placeholder={String(firstPayment)}
+            value={paidInput}
+            onChange={e => handlePaidChange(e.target.value)}
+          />
+        ) : (
+          <input className={ro} readOnly value={selectedPlan ? money(firstPayment) : "—"} />
+        )}
+      </label>
+
+      <label className="block text-xs font-bold">
+        Pending amount (₹)
+        {hasPartialPayment ? (
+          <input
+            className="input mt-1 bg-white font-semibold text-[#b07818]"
+            data-testid="pending-amount"
+            type="text"
+            inputMode="numeric"
+            placeholder="0"
+            value={pendingInput}
+            onChange={e => handlePendingChange(e.target.value)}
+          />
+        ) : (
+          <input className={ro} data-testid="pending" readOnly value={money(0)} />
+        )}
+      </label>
+
       <label className="block text-xs font-bold">Joining date *<input className="input mt-1" data-testid="joining" type="date" value={joining} onChange={e => setJoining(e.target.value)} />{err(!joiningValid, "Joining date is required.")}</label>
       <label className="block text-xs font-bold">Renewal date<input className={ro} data-testid="renewal" readOnly value={renewalDate ? date(renewalDate) : "—"} /></label>
-      <label className="block text-xs font-bold">Pending amount<input className={ro} data-testid="pending" readOnly value={money(pendingAmount)} /></label>
       <label className="block text-xs font-bold col-span-2">Address *<textarea className="input mt-1 py-2 min-h-20" data-testid="address" value={address} onChange={e => setAddress(e.target.value)} />{err(!addressValid, "Address is required.")}</label>
     </div>
 
@@ -1327,14 +3143,18 @@ export default function Home() {
   const [selectedMember, setSelectedMember] = useState<AnyRow | null>(null);
   const [renewingMember, setRenewingMember] = useState<AnyRow | null>(null);
   const [whatsAppMember, setWhatsAppMember] = useState<AnyRow | null>(null);
+  const [historyMember, setHistoryMember] = useState<AnyRow | null>(null);
+  const [settlingMember, setSettlingMember] = useState<AnyRow | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [paymentsMonth, setPaymentsMonth] = useState(currentMonthIso);
+  const [rosterMonth, setRosterMonth] = useState<string | null>(null);
+  const [expenseMonth, setExpenseMonth] = useState<string | null>(null);
 
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: getDashboardSnapshot, enabled: isAuthenticated });
   const members = useQuery({ queryKey: ["members"], queryFn: getMembers, enabled: isAuthenticated });
   const payments = useQuery({ queryKey: ["payments", paymentsMonth], queryFn: () => getPayments(paymentsMonth), enabled: isAuthenticated });
   const plans = useQuery({ queryKey: ["plans"], queryFn: getPlans, enabled: isAuthenticated });
-  const balance = useQuery({ queryKey: ["balance"], queryFn: () => getBalanceSheet(100), enabled: isAuthenticated });
+  const balance = useQuery({ queryKey: ["balance"], queryFn: getLiveBalanceSheet, enabled: isAuthenticated });
   const membersWithStatus = useQuery({ queryKey: ["membersWithStatus"], queryFn: () => getMembersWithStatus(), enabled: isAuthenticated });
 
   if (authLoading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className="h-10 w-10 rounded-xl bg-[#10251f] text-[#c9f0dc] flex items-center justify-center mx-auto animate-pulse"><Dumbbell size={20} /></div><p className="text-sm text-muted-foreground mt-4">Preparing owner workspace…</p></div></div>;
@@ -1346,6 +3166,9 @@ export default function Home() {
     queryClient.invalidateQueries({ queryKey: ["membersWithStatus"] });
     queryClient.invalidateQueries({ queryKey: ["member"] });
     queryClient.invalidateQueries({ queryKey: ["payments"] });
+    queryClient.invalidateQueries({ queryKey: ["balance"] });
+    queryClient.invalidateQueries({ queryKey: ["monthlyRoster"] });
+    queryClient.invalidateQueries({ queryKey: ["memberPayments"] });
   };
 
   const memberRows = (membersWithStatus.data ?? members.data) as AnyRow[] | undefined;
@@ -1380,6 +3203,8 @@ export default function Home() {
             error={membersWithStatus.error || members.error}
             initialStatusFilter={membersFilterStatus}
             onOpenMember={setSelectedMember}
+            onOpenPaymentHistory={setHistoryMember}
+            onSettlePending={setSettlingMember}
             onRenewMember={setRenewingMember}
             onOpenWhatsApp={setWhatsAppMember}
             onAdd={() => setAddOpen(true)}
@@ -1405,6 +3230,7 @@ export default function Home() {
             loading={membersLoading}
             error={members.error}
             onOpenMember={setSelectedMember}
+            onOpenPaymentHistory={setHistoryMember}
             onRenewMember={setRenewingMember}
             onOpenWhatsApp={setWhatsAppMember}
           />
@@ -1412,7 +3238,15 @@ export default function Home() {
 
         {page === "plans" && <PlansPage plans={plans.data as AnyRow[] | undefined} loading={plans.isLoading} error={plans.error} />}
 
-        {page === "balance" && <BalancePage rows={balance.data as AnyRow[] | undefined} loading={balance.isLoading} error={balance.error} />}
+        {page === "balance" && (
+          <BalancePage
+            rows={balance.data}
+            loading={balance.isLoading}
+            error={balance.error}
+            onManageRoster={setRosterMonth}
+            onRecordExpenses={m => setExpenseMonth(m || currentMonthIso)}
+          />
+        )}
       </main>
 
       {selectedMember && (
@@ -1421,6 +3255,7 @@ export default function Home() {
           onClose={() => setSelectedMember(null)}
           onRefresh={commonRefresh}
           onRenewMember={m => { setSelectedMember(null); setRenewingMember(m); }}
+          onSettlePending={m => setSettlingMember(m)}
           onOpenWhatsApp={setWhatsAppMember}
         />
       )}
@@ -1450,6 +3285,69 @@ export default function Home() {
           onClose={() => setAddOpen(false)}
           onDone={() => {
             setAddOpen(false);
+            commonRefresh();
+          }}
+        />
+      )}
+
+      {rosterMonth && (
+        <MonthlyRosterModal
+          monthIso={rosterMonth}
+          onClose={() => setRosterMonth(null)}
+          onOpenMember={m => {
+            const fullMember = memberRows?.find(
+              existing => Number(existing.register_no) === Number(m.register_no)
+            ) ?? m;
+            setRosterMonth(null);
+            setSelectedMember(fullMember);
+          }}
+          onRecordExpenses={m => {
+            setExpenseMonth(m);
+          }}
+        />
+      )}
+
+      {expenseMonth && (
+        <RecordExpensesModal
+          initialMonth={expenseMonth}
+          balanceRows={balance.data}
+          onClose={() => setExpenseMonth(null)}
+          onDone={() => {
+            setExpenseMonth(null);
+            commonRefresh();
+          }}
+        />
+      )}
+
+      {historyMember && (
+        <MemberPaymentHistoryModal
+          member={historyMember}
+          onClose={() => setHistoryMember(null)}
+          onRenewMember={m => {
+            setHistoryMember(null);
+            setRenewingMember(m);
+          }}
+          onSettlePending={m => {
+            setHistoryMember(null);
+            setSettlingMember(m);
+          }}
+          onOpenWhatsApp={setWhatsAppMember}
+          onManageMember={m => {
+            const fullMember = memberRows?.find(
+              existing => Number(existing.register_no) === Number(m.register_no)
+            ) ?? m;
+            setHistoryMember(null);
+            setSelectedMember(fullMember);
+          }}
+        />
+      )}
+
+      {settlingMember && (
+        <SettlePendingModal
+          member={settlingMember}
+          onClose={() => setSettlingMember(null)}
+          onDone={() => {
+            setSettlingMember(null);
             commonRefresh();
           }}
         />

@@ -107,3 +107,4 @@ temp/
 *.sqlite3
 
 .project-config.json
+.playwright-mcp/
