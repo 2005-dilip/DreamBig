@@ -38,7 +38,7 @@ import {
 } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertCircle, ArrowUpRight, BarChart3, Bell, CalendarDays, Check,
+  AlertCircle, AlertTriangle, ArrowUpRight, BarChart3, Bell, CalendarDays, Check,
   ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, Dumbbell, ExternalLink,
   Filter, Info, LayoutDashboard, Loader2, Menu, MessageCircle, Package, Plus, RefreshCw,
   Search, Settings2, ShieldCheck, Trash2, UserRound, Users, WalletCards, X, Zap, Send,
@@ -2901,13 +2901,220 @@ function RecordPaymentForm({ member, onDone }: { member: AnyRow; onDone: () => v
 function DetailLine({ label, value }: { label: string; value: any }) { return <div className="flex gap-4 text-sm"><div className="w-28 shrink-0 text-xs text-muted-foreground">{label}</div><div className="font-medium break-words">{value}</div></div>; }
 
 function EditMemberForm({ member, onDone }: { member: AnyRow; onDone: () => void }) {
-  const mutation = useMutation({ mutationFn: (patch: Parameters<typeof updateMember>[1]) => updateMember(Number(member.register_no), patch), onSuccess: () => { toast.success("Member profile updated."); onDone(); }, onError: (error: any) => toast.error(error.message) });
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (patch: Parameters<typeof updateMember>[1]) => updateMember(Number(member.register_no), patch),
+    onSuccess: () => {
+      toast.success("Member profile updated.");
+      queryClient.invalidateQueries({ queryKey: ["member", Number(member.register_no)] });
+      queryClient.invalidateQueries({ queryKey: ["membersWithStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["balanceSheet"] });
+      onDone();
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  const initialJoining = String(member.date_of_joining || "").slice(0, 10);
   const [name, setName] = useState(member.name || "");
   const [mobile, setMobile] = useState(member.mobile_no || "");
   const [dob, setDob] = useState(String(member.date_of_birth || "").slice(0, 10));
+  const [joining, setJoining] = useState(initialJoining);
   const [address, setAddress] = useState(member.address || "");
   const [renewal, setRenewal] = useState(String(member.renewal_date || "").slice(0, 10));
-  return <div className="mt-6 rounded-xl bg-[#f7faf8] p-4"><div className="text-sm font-bold mb-4">Edit current member information</div><div className="space-y-3"><label className="block text-xs font-bold">Name<input className="input mt-1" value={name} onChange={e => setName(e.target.value)} /></label><label className="block text-xs font-bold">Mobile<input className="input mt-1" value={mobile} onChange={e => setMobile(e.target.value)} /></label><label className="block text-xs font-bold">Date of birth<input className="input mt-1" type="date" value={dob} onChange={e => setDob(e.target.value)} /></label><label className="block text-xs font-bold">Renewal date<input className="input mt-1" type="date" value={renewal} onChange={e => setRenewal(e.target.value)} /></label><label className="block text-xs font-bold">Address<textarea className="input mt-1 py-2 min-h-20" value={address} onChange={e => setAddress(e.target.value)} /></label><button className="btn btn-primary w-full" disabled={mutation.isPending} onClick={() => mutation.mutate({ name, mobile_no: mobile, date_of_birth: dob || null, address, renewal_date: renewal })}>{mutation.isPending ? "Saving…" : "Save current profile"}</button></div></div>;
+  const [showCautionModal, setShowCautionModal] = useState(false);
+
+  const isJoiningChanged = Boolean(joining && initialJoining && joining !== initialJoining);
+
+  const performSave = () => {
+    mutation.mutate({
+      name: name.trim(),
+      mobile_no: mobile.trim(),
+      date_of_birth: dob || null,
+      date_of_joining: joining,
+      address: address.trim(),
+      renewal_date: renewal,
+    });
+  };
+
+  const handleSaveClick = () => {
+    if (!name.trim()) {
+      toast.error("Member name is required.");
+      return;
+    }
+    if (!joining) {
+      toast.error("Joining date cannot be empty.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(joining)) {
+      toast.error("Please enter a valid joining date.");
+      return;
+    }
+
+    // Only prompt with caution if the joining date is being updated
+    if (isJoiningChanged) {
+      setShowCautionModal(true);
+      return;
+    }
+
+    performSave();
+  };
+
+  return (
+    <>
+      <div className="mt-6 rounded-xl bg-[#f7faf8] p-4">
+        <div className="text-sm font-bold mb-4">Edit current member information</div>
+        <div className="space-y-3">
+          <label className="block text-xs font-bold">
+            Name
+            <input className="input mt-1" value={name} onChange={e => setName(e.target.value)} />
+          </label>
+          <label className="block text-xs font-bold">
+            Mobile
+            <input className="input mt-1" value={mobile} onChange={e => setMobile(e.target.value)} />
+          </label>
+          <label className="block text-xs font-bold">
+            Date of birth
+            <input className="input mt-1" type="date" value={dob} onChange={e => setDob(e.target.value)} />
+          </label>
+
+          {/* Joining date with special caution styling & notice */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+            <div className="flex items-center justify-between">
+              <label htmlFor="edit-joining-date" className="block text-xs font-bold text-amber-950">
+                Date of joining
+              </label>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                <AlertTriangle size={11} className="text-amber-600" /> Caution
+              </span>
+            </div>
+            <input
+              id="edit-joining-date"
+              className="input mt-1.5 bg-white border-amber-300 focus:border-amber-500 focus:ring-amber-500 text-foreground"
+              type="date"
+              value={joining}
+              onChange={e => setJoining(e.target.value)}
+            />
+            <div className="mt-2 text-[11px] text-amber-800 flex items-start gap-1.5 leading-relaxed">
+              <AlertCircle size={13} className="shrink-0 mt-0.5 text-amber-600" />
+              <span>
+                <strong>Caution:</strong> Modifying the joining date alters the member's registration record, tenure, and monthly joiner metrics. Change only if correcting an enrollment mistake.
+              </span>
+            </div>
+            {isJoiningChanged && (
+              <div className="mt-2 text-[11px] font-medium text-amber-950 bg-amber-100/90 border border-amber-300 rounded-lg p-2 flex items-center justify-between">
+                <span>
+                  Original: <strong>{date(initialJoining)}</strong> → New: <strong>{date(joining)}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="text-[10px] uppercase font-bold text-amber-800 hover:text-amber-950 underline ml-2"
+                  onClick={() => setJoining(initialJoining)}
+                >
+                  Revert
+                </button>
+              </div>
+            )}
+          </div>
+
+          <label className="block text-xs font-bold">
+            Renewal date
+            <input className="input mt-1" type="date" value={renewal} onChange={e => setRenewal(e.target.value)} />
+          </label>
+          <label className="block text-xs font-bold">
+            Address
+            <textarea className="input mt-1 py-2 min-h-20" value={address} onChange={e => setAddress(e.target.value)} />
+          </label>
+          <button className="btn btn-primary w-full" disabled={mutation.isPending} onClick={handleSaveClick}>
+            {mutation.isPending ? "Saving…" : "Save current profile"}
+          </button>
+        </div>
+      </div>
+
+      {/* Caution Dialog: Displays ONLY for Joining Date Updates */}
+      {showCautionModal && (
+        <div
+          className="drawer-backdrop !z-[60] !justify-center !items-center p-4"
+          onMouseDown={e => {
+            if (e.target === e.currentTarget && !mutation.isPending) {
+              setShowCautionModal(false);
+            }
+          }}
+        >
+          <div
+            className="card !max-w-md w-full !h-auto max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl p-6 border border-amber-300 bg-white"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="caution-dialog-title"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 shrink-0">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-[.1em] text-amber-700">Caution Required</div>
+                  <h3 id="caution-dialog-title" className="font-display font-bold text-lg text-foreground">
+                    Confirm Joining Date Change
+                  </h3>
+                </div>
+              </div>
+              <button
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
+                onClick={() => setShowCautionModal(false)}
+                disabled={mutation.isPending}
+                aria-label="Cancel"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-900 space-y-2.5">
+              <p className="font-semibold text-amber-950">
+                You are updating the official registration / joining date for {member.name} (Register #{member.register_no}).
+              </p>
+              <div className="grid grid-cols-2 gap-2 bg-white/90 p-2.5 rounded-lg border border-amber-200">
+                <div>
+                  <div className="text-[10px] uppercase text-muted-foreground font-bold">Current Joining Date</div>
+                  <div className="font-semibold text-foreground text-sm mt-0.5">{date(initialJoining)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-amber-700 font-bold">New Joining Date</div>
+                  <div className="font-bold text-amber-900 text-sm mt-0.5">{date(joining)}</div>
+                </div>
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-800 pt-1 leading-relaxed">
+                <li>This alters the member's permanent registration record.</li>
+                <li>Historical monthly joiner metrics, rosters, and cohorts will recalculate using the new date.</li>
+                <li>Proceed only if you are correcting an inaccurate joining date.</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-2.5 mt-5">
+              <button
+                className="btn btn-ghost flex-1"
+                onClick={() => setShowCautionModal(false)}
+                disabled={mutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-md shadow-amber-600/20"
+                onClick={() => {
+                  setShowCautionModal(false);
+                  performSave();
+                }}
+                disabled={mutation.isPending}
+              >
+                {mutation.isPending ? "Saving…" : "Confirm & Update"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 const DURATION_LABEL: Record<number, string> = { 1: "1 Month", 3: "3 Months", 6: "6 Months", 12: "12 Months" };
